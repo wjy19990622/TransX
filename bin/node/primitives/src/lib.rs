@@ -20,6 +20,7 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use sp_runtime::Permill;
 use sp_runtime::{
 	generic, traits::{Verify, BlakeTwo256, IdentifyAccount}, OpaqueExtrinsic, MultiSignature
 };
@@ -42,6 +43,15 @@ pub type Balance = u128;
 
 /// Type used for expressing timestamp.
 pub type Moment = u64;
+
+/// Type used for workforce.
+pub type Workforce = Permill;
+
+/// Type used for USD unit.
+pub type USD = u64;
+
+/// Type used for mining time
+pub type Count = u64;
 
 /// Index of a transaction in the chain.
 pub type Index = u32;

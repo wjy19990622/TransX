@@ -3008,6 +3008,7 @@ dependencies = [
  "sc-telemetry 2.0.0",
  "sc-transaction-pool 2.0.0",
  "serde 1.0.103 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_json 1.0.42 (registry+https://github.com/rust-lang/crates.io-index)",
  "sp-authority-discovery 2.0.0",
  "sp-consensus 2.0.0",
  "sp-consensus-babe 2.0.0",

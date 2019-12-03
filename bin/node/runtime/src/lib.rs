@@ -27,7 +27,7 @@ use support::{
 	traits::{SplitTwoWays, Currency, Randomness},
 };
 use primitives::u32_trait::{_1, _2, _3, _4};
-use node_primitives::{AccountId, AccountIndex, Balance, BlockNumber, Hash, Index, Moment, Signature};
+use node_primitives::{AccountId, AccountIndex, Balance, BlockNumber, Hash, Index, Moment, Signature, Count, USD, Workforce};
 use sp_api::impl_runtime_apis;
 use sp_runtime::{Permill, Perbill, ApplyExtrinsicResult, impl_opaque_keys, generic, create_runtime_str};
 use sp_runtime::curve::PiecewiseLinear;
@@ -64,6 +64,9 @@ use impls::{CurrencyToVoteHandler, Author, LinearWeightToFee, TargetedFeeAdjustm
 /// Constant values used within the runtime.
 pub mod constants;
 use constants::{time::*, currency::*};
+
+/// Transx function used within the runtime.
+pub mod transx;
 
 // Make the WASM binary available.
 #[cfg(feature = "std")]
@@ -507,6 +510,118 @@ impl system::offchain::CreateTransaction<Runtime, UncheckedExtrinsic> for Runtim
 	}
 }
 
+parameter_types! {
+	pub const BTCLimitCount: Count = 100;
+	pub const ETHLimitCount: Count = 200;
+	pub const EOSLimitCount: Count = 1000;
+	pub const USDTLimitCount: Count = 100;
+	pub const DCEPLimitCount: Count = 2000;
+	pub const DOTLimitCount: Count = 500;
+	pub const DashLimitCount: Count = 50;
+	pub const ADALimitCount: Count = 100;
+	pub const DCAPLimitCount: Count = 4000;
+	pub const TUSDTLimitCount: Count = 4000;
+	pub const BTCMaxPortion: Permill = Permill::from_percent(70);
+	pub const ETHMaxPortion: Permill = Permill::from_percent(10);
+	pub const EOSMaxPortion: Permill = Permill::from_percent(8);
+	pub const USDTMaxPortion: Permill = Permill::from_percent(50);
+	pub const DCEPaxPortion: Permill = Permill::from_percent(50);
+	pub const DOTMaxPortion: Permill = Permill::from_percent(10);
+	pub const DashMaxPortion: Permill = Permill::from_percent(5);
+	pub const ADAMaxPortion: Permill = Permill::from_percent(5);
+	pub const DCAPMaxPortion: Permill = Permill::from_percent(50);
+	pub const TUSDTMaxPortion: Permill = Permill::from_percent(70);
+	pub const BTCLimitAmount: USD = 100000;
+	pub const ETHLimitAmount: USD = 50000; 
+	pub const EOSLimitAmount: USD = 50000; 
+	pub const USDTLimitAmount: USD = 100000; 
+	pub const DCEPLimitAmount: USD = 1000000; 
+	pub const DOTLimitAmount: USD = 50000; 
+	pub const DashLimitAmount: USD = 20000; 
+	pub const ADALimitAmount: USD = 20000; 
+	pub const DCAPLimitAmount: USD = 2000000; 
+	pub const TUSDTLimitAmount: USD = 2000000;
+	pub const BTCMaxLimitAmount: USD = 100000;
+	pub const ETHMaxLimitAmount: USD = 40000;
+	pub const EOSMaxLimitAmount: USD = 10000;
+	pub const USDTMaxLimitAmount: USD = 50000;
+	pub const DCEPMaxLimitAmount: USD = 5000;
+	pub const DOTMaxLimitAmount: USD = 20000;
+	pub const DashMaxLimitAmount: USD = 5000;
+	pub const ADAMaxLimitAmount: USD = 5000;
+	pub const DCAPMaxLimitAmount: USD = 10000;
+	pub const TUSDTMaxLimitAmount: USD = 50000;
+	pub const InitialTotalCount: Count = 10000;
+	pub const InitialTotalAmount: USD = 1000000;
+	pub const InitialTotalWorkforce: Workforce = Permill::from_percent(70);
+	pub const FrequencyWorkforceProportion: Permill = Permill::from_percent(50); 	// α
+	pub const AmountWorkforceProportion: Permill = Permill::from_percent(50);		// β	
+	pub const SenderWorkforceProportion: Permill = Permill::from_percent(50);		// SR
+	pub const ReceiverWorkforceProportion: Permill = Permill::from_percent(50);		// RR
+	pub const SuperiorShareRatio: Permill = Permill::from_percent(50);				// SSR
+	pub const OnsuperiorShareRatio: Permill = Permill::from_percent(25);			// OSR
+	pub const DailyMinimumReward: Balance = 1000 * DOLLARS;							// MR
+	pub const MinerSharefeeRatio: Permill = Permill::from_percent(50);				// MSR
+}
+
+/// Used for the module transx in `./transx.rs`
+impl transx::Trait for Runtime {
+	type Event = Event;
+	type Currency = Balances;
+	type BTCLimitCount = BTCLimitCount;
+	type ETHLimitCount = ETHLimitCount;
+	type EOSLimitCount = EOSLimitCount;
+	type USDTLimitCount = USDTLimitCount;
+	type DCEPLimitCount = DCEPLimitCount;
+	type DOTLimitCount = DOTLimitCount;
+	type DashLimitCount = DashLimitCount;
+	type ADALimitCount = ADALimitCount;
+	type DCAPLimitCount = DCAPLimitCount;
+	type TUSDTLimitCount = TUSDTLimitCount;
+	type BTCMaxPortion = BTCMaxPortion;
+	type ETHMaxPortion = ETHMaxPortion;
+	type EOSMaxPortion = EOSMaxPortion;
+	type USDTMaxPortion = USDTMaxPortion;
+	type DCEPaxPortion = DCEPaxPortion;
+	type DOTMaxPortion = DOTMaxPortion;
+	type DashMaxPortion = DashMaxPortion;
+	type ADAMaxPortion = ADAMaxPortion;
+	type DCAPMaxPortion = DCAPMaxPortion;
+	type TUSDTMaxPortion = TUSDTMaxPortion;
+	type BTCLimitAmount = BTCLimitAmount;
+	type ETHLimitAmount = ETHLimitAmount; 
+	type EOSLimitAmount = EOSLimitAmount; 
+	type USDTLimitAmount = USDTLimitAmount; 
+	type DCEPLimitAmount = DCEPLimitAmount; 
+	type DOTLimitAmount = DOTLimitAmount; 
+	type DashLimitAmount = DashLimitAmount; 
+	type ADALimitAmount = ADALimitAmount; 
+	type DCAPLimitAmount = DCAPLimitAmount; 
+	type TUSDTLimitAmount = TUSDTLimitAmount;
+	type BTCMaxLimitAmount = BTCMaxLimitAmount;
+	type ETHMaxLimitAmount = ETHMaxLimitAmount;
+	type EOSMaxLimitAmount = EOSMaxLimitAmount;
+	type USDTMaxLimitAmount = USDTMaxLimitAmount;
+	type DCEPMaxLimitAmount = DCEPMaxLimitAmount;
+	type DOTMaxLimitAmount = DOTMaxLimitAmount;
+	type DashMaxLimitAmount = DashMaxLimitAmount;
+	type ADAMaxLimitAmount = ADAMaxLimitAmount;
+	type DCAPMaxLimitAmount = DCAPMaxLimitAmount;
+	type TUSDTMaxLimitAmount = TUSDTMaxLimitAmount;
+	type InitialTotalCount = InitialTotalCount;
+	type InitialTotalAmount = InitialTotalAmount;
+	type InitialTotalWorkforce = InitialTotalWorkforce;
+	type FrequencyWorkforceProportion = FrequencyWorkforceProportion; 	// α
+	type AmountWorkforceProportion = AmountWorkforceProportion;			// β	
+	type SenderWorkforceProportion = SenderWorkforceProportion;			// SR
+	type ReceiverWorkforceProportion = ReceiverWorkforceProportion;		// RR
+	type SuperiorShareRatio = SuperiorShareRatio;						// SSR
+	type OnsuperiorShareRatio = OnsuperiorShareRatio;					// OSR
+	type DailyMinimumReward = DailyMinimumReward;						// MR
+	type MinerSharefeeRatio = MinerSharefeeRatio;						// MSR
+
+}
+
 construct_runtime!(
 	pub enum Runtime where
 		Block = Block,
@@ -538,6 +653,7 @@ construct_runtime!(
 		Offences: offences::{Module, Call, Storage, Event},
 		RandomnessCollectiveFlip: randomness_collective_flip::{Module, Call, Storage},
 		Nicks: nicks::{Module, Call, Storage, Event<T>},
+		Transx: transx::{Module, Call, Storage, Event<T>},
 	}
 );
 

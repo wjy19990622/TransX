@@ -25,6 +25,7 @@ pub mod currency {
 	pub const DOLLARS: Balance = 100 * CENTS;
 }
 
+
 /// Time.
 pub mod time {
 	use node_primitives::{Moment, BlockNumber};

@@ -27,6 +27,7 @@ use node_runtime::{
 use node_runtime::Block;
 use node_runtime::constants::currency::*;
 use sc_service;
+use serde_json::map::Map;
 use hex_literal::hex;
 use sc_telemetry::TelemetryEndpoints;
 use grandpa_primitives::{AuthorityId as GrandpaId};
@@ -220,7 +221,7 @@ pub fn testnet_genesis(
 		]
 	});
 
-	const ENDOWMENT: Balance = 10_000_000 * DOLLARS;
+	const ENDOWMENT: Balance = 1_000 * DOLLARS;
 	const STASH: Balance = 100 * DOLLARS;
 
 	GenesisConfig {
@@ -258,11 +259,21 @@ pub fn testnet_genesis(
 		}),
 		democracy: Some(DemocracyConfig::default()),
 		collective_Instance1: Some(CouncilConfig {
-			members: vec![],
+			members: vec![
+				get_account_id_from_seed::<sr25519::Public>("Alice"),
+				get_account_id_from_seed::<sr25519::Public>("Bob"),
+				get_account_id_from_seed::<sr25519::Public>("Charlie"),
+				get_account_id_from_seed::<sr25519::Public>("Dave"),
+			],
 			phantom: Default::default(),
 		}),
 		collective_Instance2: Some(TechnicalCommitteeConfig {
-			members: vec![],
+			members: vec![
+				get_account_id_from_seed::<sr25519::Public>("Alice"),
+				get_account_id_from_seed::<sr25519::Public>("Bob"),
+				get_account_id_from_seed::<sr25519::Public>("Charlie"),
+				get_account_id_from_seed::<sr25519::Public>("Dave"),
+			],
 			phantom: Default::default(),
 		}),
 		contracts: Some(ContractsConfig {
@@ -296,24 +307,27 @@ fn development_config_genesis() -> GenesisConfig {
 	testnet_genesis(
 		vec![
 			get_authority_keys_from_seed("Alice"),
-		],
-		get_account_id_from_seed::<sr25519::Public>("Alice"),
-		None,
-		true,
+		],														//initial_authorities
+		get_account_id_from_seed::<sr25519::Public>("Alice"),	//root_key
+		None,													//Some(endowed_accounts)
+		true,													//enable_println
 	)
 }
 
 /// Development config (single validator Alice)
 pub fn development_config() -> ChainSpec {
+	let mut properties = Map::new();
+	properties.insert("tokenSymbol".into(),"DCAP".into());
+	properties.insert("tokenDecimals".into(),14.into());
 	ChainSpec::from_genesis(
-		"Development",
-		"dev",
-		development_config_genesis,
-		vec![],
-		None,
-		None,
-		None,
-		Default::default(),
+		"Development",  			//name
+		"dev",						//id
+		development_config_genesis,	//constructor
+		vec![],						//boot_nodes
+		None,						//telemetry_endpoints
+		None,						//protocol_id
+		Some(properties),					//properties
+		Default::default(),			//extensions
 	)
 }
 
