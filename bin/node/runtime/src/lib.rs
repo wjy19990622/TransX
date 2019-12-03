@@ -562,6 +562,9 @@ parameter_types! {
 	pub const OnsuperiorShareRatio: Permill = Permill::from_percent(25);			// OSR
 	pub const DailyMinimumReward: Balance = 1000 * DOLLARS;							// MR
 	pub const MinerSharefeeRatio: Permill = Permill::from_percent(50);				// MSR
+	pub const PledgeAmount: Balance = 500 * DOLLARS;
+	pub const SettlePeriodBlock: BlockNumber = 28800;
+	pub const FoundingTeamProportion: Permill = Permill::from_percent(10);
 }
 
 /// Used for the module transx in `./transx.rs`
@@ -619,7 +622,9 @@ impl transx::Trait for Runtime {
 	type OnsuperiorShareRatio = OnsuperiorShareRatio;					// OSR
 	type DailyMinimumReward = DailyMinimumReward;						// MR
 	type MinerSharefeeRatio = MinerSharefeeRatio;						// MSR
-
+	type PledgeAmount = PledgeAmount;
+	type SettlePeriodBlock = SettlePeriodBlock;
+	type FoundingTeamProportion = FoundingTeamProportion;
 }
 
 construct_runtime!(
