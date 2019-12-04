@@ -59,6 +59,7 @@ pub use staking::StakerStatus;
 
 /// Implementations of some helper traits passed into runtime modules as associated types.
 pub mod impls;
+pub mod register;
 use impls::{CurrencyToVoteHandler, Author, LinearWeightToFee, TargetedFeeAdjustment};
 
 /// Constant values used within the runtime.
@@ -364,6 +365,7 @@ impl membership::Trait<membership::Instance1> for Runtime {
 parameter_types! {
 	pub const ProposalBond: Permill = Permill::from_percent(5);
 	pub const ProposalBondMinimum: Balance = 1 * DOLLARS;
+	pub const BondValue: Balance = 5*DOLLARS;  // 自己添加的参数
 	pub const SpendPeriod: BlockNumber = 1 * DAYS;
 	pub const Burn: Permill = Permill::from_percent(50);
 }
@@ -378,6 +380,11 @@ impl treasury::Trait for Runtime {
 	type ProposalBondMinimum = ProposalBondMinimum;
 	type SpendPeriod = SpendPeriod;
 	type Burn = Burn;
+}
+impl register::Trait for Runtime {
+	type Bond = BondValue;
+	type Event = Event;
+	type Currency = Balances;
 }
 
 parameter_types! {
@@ -532,14 +539,14 @@ parameter_types! {
 	pub const DCAPMaxPortion: Permill = Permill::from_percent(50);
 	pub const TUSDTMaxPortion: Permill = Permill::from_percent(70);
 	pub const BTCLimitAmount: USD = 100000;
-	pub const ETHLimitAmount: USD = 50000; 
-	pub const EOSLimitAmount: USD = 50000; 
-	pub const USDTLimitAmount: USD = 100000; 
-	pub const DCEPLimitAmount: USD = 1000000; 
-	pub const DOTLimitAmount: USD = 50000; 
-	pub const DashLimitAmount: USD = 20000; 
-	pub const ADALimitAmount: USD = 20000; 
-	pub const DCAPLimitAmount: USD = 2000000; 
+	pub const ETHLimitAmount: USD = 50000;
+	pub const EOSLimitAmount: USD = 50000;
+	pub const USDTLimitAmount: USD = 100000;
+	pub const DCEPLimitAmount: USD = 1000000;
+	pub const DOTLimitAmount: USD = 50000;
+	pub const DashLimitAmount: USD = 20000;
+	pub const ADALimitAmount: USD = 20000;
+	pub const DCAPLimitAmount: USD = 2000000;
 	pub const TUSDTLimitAmount: USD = 2000000;
 	pub const BTCMaxLimitAmount: USD = 100000;
 	pub const ETHMaxLimitAmount: USD = 40000;
@@ -555,7 +562,7 @@ parameter_types! {
 	pub const InitialTotalAmount: USD = 1000000;
 	pub const InitialTotalWorkforce: Workforce = Permill::from_percent(70);
 	pub const FrequencyWorkforceProportion: Permill = Permill::from_percent(50); 	// α
-	pub const AmountWorkforceProportion: Permill = Permill::from_percent(50);		// β	
+	pub const AmountWorkforceProportion: Permill = Permill::from_percent(50);		// β
 	pub const SenderWorkforceProportion: Permill = Permill::from_percent(50);		// SR
 	pub const ReceiverWorkforceProportion: Permill = Permill::from_percent(50);		// RR
 	pub const SuperiorShareRatio: Permill = Permill::from_percent(50);				// SSR
@@ -592,14 +599,14 @@ impl transx::Trait for Runtime {
 	type DCAPMaxPortion = DCAPMaxPortion;
 	type TUSDTMaxPortion = TUSDTMaxPortion;
 	type BTCLimitAmount = BTCLimitAmount;
-	type ETHLimitAmount = ETHLimitAmount; 
-	type EOSLimitAmount = EOSLimitAmount; 
-	type USDTLimitAmount = USDTLimitAmount; 
-	type DCEPLimitAmount = DCEPLimitAmount; 
-	type DOTLimitAmount = DOTLimitAmount; 
-	type DashLimitAmount = DashLimitAmount; 
-	type ADALimitAmount = ADALimitAmount; 
-	type DCAPLimitAmount = DCAPLimitAmount; 
+	type ETHLimitAmount = ETHLimitAmount;
+	type EOSLimitAmount = EOSLimitAmount;
+	type USDTLimitAmount = USDTLimitAmount;
+	type DCEPLimitAmount = DCEPLimitAmount;
+	type DOTLimitAmount = DOTLimitAmount;
+	type DashLimitAmount = DashLimitAmount;
+	type ADALimitAmount = ADALimitAmount;
+	type DCAPLimitAmount = DCAPLimitAmount;
 	type TUSDTLimitAmount = TUSDTLimitAmount;
 	type BTCMaxLimitAmount = BTCMaxLimitAmount;
 	type ETHMaxLimitAmount = ETHMaxLimitAmount;
@@ -615,7 +622,7 @@ impl transx::Trait for Runtime {
 	type InitialTotalAmount = InitialTotalAmount;
 	type InitialTotalWorkforce = InitialTotalWorkforce;
 	type FrequencyWorkforceProportion = FrequencyWorkforceProportion; 	// α
-	type AmountWorkforceProportion = AmountWorkforceProportion;			// β	
+	type AmountWorkforceProportion = AmountWorkforceProportion;			// β
 	type SenderWorkforceProportion = SenderWorkforceProportion;			// SR
 	type ReceiverWorkforceProportion = ReceiverWorkforceProportion;		// RR
 	type SuperiorShareRatio = SuperiorShareRatio;						// SSR
@@ -658,7 +665,9 @@ construct_runtime!(
 		Offences: offences::{Module, Call, Storage, Event},
 		RandomnessCollectiveFlip: randomness_collective_flip::{Module, Call, Storage},
 		Nicks: nicks::{Module, Call, Storage, Event<T>},
-		Transx: transx::{Module, Call, Storage, Event<T>},
+		Transx: transx::{Module, Call, Storage, Event<T>
+		Register: register::{Module, Call, Storage, Event<T>},
+		},
 	}
 );
 
