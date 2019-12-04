@@ -665,9 +665,8 @@ construct_runtime!(
 		Offences: offences::{Module, Call, Storage, Event},
 		RandomnessCollectiveFlip: randomness_collective_flip::{Module, Call, Storage},
 		Nicks: nicks::{Module, Call, Storage, Event<T>},
-		Transx: transx::{Module, Call, Storage, Event<T>
+		Transx: transx::{Module, Call, Storage, Event<T>},
 		Register: register::{Module, Call, Storage, Event<T>},
-		},
 	}
 );
 
