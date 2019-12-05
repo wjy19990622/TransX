@@ -48,7 +48,7 @@ decl_module! {
 		fn deposit_event() = default;
 
 		#[weight = SimpleDispatchInfo::FixedNormal(500_000)]
-		pub fn register(origin, hardware_id: Vec<u8>, father_address: T::AccountId, machine_state: Vec<u8>) -> Result{
+		pub fn register(origin, hardware_id: Vec<u8>, father_Address: T::AccountId, machine_state: Vec<u8>) -> Result{
 			/// register the machine.
 			let who = ensure_signed(origin)?;
 			ensure!(!<AllMiners<T>>::exists(who.clone()), "you have been registed!");
@@ -67,21 +67,21 @@ decl_module! {
 			let register_time = <timestamp::Module<T>>::get();
 			// 添加注册时间
 
-			ensure!(!(who.clone()==father_address.clone()), "the father_address can't be youself!");
+			ensure!(!(who.clone()==father_Address.clone()), "the father_address can't be youself!");
 			// 上上级不能是自己本身。
 
 			let mut minerinfo = MinerInfo{
 				hardware_id:  hardware_id.clone(),
-				father_address: father_address.clone(),
+				father_address: father_Address.clone(),
 				grandpa_address: None,  // 上上级默认是None
 				register_time: register_time.clone(),
 				machine_state: machine_state,
 				machine_owner: who.clone(),
 			};
 
-			if <AllMiners<T>>::exists(father_address.clone()){
-				let grandpa = Self::allminers(who.clone()).grandpa_address;
-				minerinfo.grandpa_address = grandpa;
+			if <AllMiners<T>>::exists(father_Address.clone()){
+				let grandpa = Self::allminers(father_Address.clone()).father_address;
+				minerinfo.grandpa_address = Some(grandpa);
 			}
 			// 如果存在上级 则添加上上级 如果不存在则上级是None
 
