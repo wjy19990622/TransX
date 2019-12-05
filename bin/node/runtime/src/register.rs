@@ -87,9 +87,12 @@ decl_module! {
 
 			if <AllMiners<T>>::exists(father_Address.clone()){
 				let grandpa = Self::allminers(father_Address.clone()).father_address;
-				minerinfo.grandpa_address = Some(grandpa);
+
+				if grandpa.clone() != who.clone(){
+					minerinfo.grandpa_address = Some(grandpa);
+					// grandpa_address 不能是自己
+				}
 			}
-			// 如果存在上级 则添加上上级 如果不存在则上级是None
 
 			<AllMiners<T>>::insert(who.clone(), minerinfo.clone());
 			// 添加矿机信息完毕
