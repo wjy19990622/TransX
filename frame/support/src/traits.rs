@@ -548,7 +548,7 @@ pub trait ReservableCurrency<AccountId>: Currency<AccountId> {
 	///
 	/// As much funds up to `value` will be deducted as possible. If this is less than `value`,
 	/// then `Ok(non_zero)` will be returned.
-	fn repatriate_reserved(
+	fn repatriate_reserved(  // 这个可能是把一个账户的资金转移到另外一个
 		slashed: &AccountId,
 		beneficiary: &AccountId,
 		value: Self::Balance

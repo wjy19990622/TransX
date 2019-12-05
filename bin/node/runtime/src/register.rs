@@ -1,26 +1,17 @@
-/// A runtime module template with necessary imports
 
-/// Feel free to remove or edit this file as needed.
-/// If you change the name of this file, make sure to update its references in runtime/src/lib.rs
-/// If you remove this file, you can remove those references
-
-
-/// For more guidance on Substrate modules, see the example module
-/// https://github.com/paritytech/substrate/blob/master/frame/example/src/lib.rs
-//use node_primitives::{Moment};
 type BalanceOf<T> = <<T as Trait>::Currency as Currency<<T as system::Trait>::AccountId>>::Balance;
 use support::traits::{Get,
 	Currency, ReservableCurrency
 };
 use rstd::prelude::*;
-use support::{debug, ensure, decl_module, decl_storage, decl_event, dispatch::Result, weights::{SimpleDispatchInfo}, StorageValue, StorageMap};
+use support::{debug, ensure, decl_module, decl_storage, decl_event, dispatch::Result, weights::{SimpleDispatchInfo}, StorageValue, StorageMap, StorageDoubleMap, Blake2_256};
 use system::ensure_signed;
 use timestamp;
 use codec::{Encode, Decode};
 
 #[derive(Encode, Decode, Default, Clone, PartialEq)]
 #[cfg_attr(feature = "std", derive(Debug))]
-pub struct MinerInfo<A, M> {  // 这个必须是公开的
+pub struct MinerInfo<A, M> {
 	hardware_id: Vec<u8>,
 	father_address: A,
 	grandpa_address: Option<A>,
@@ -30,9 +21,7 @@ pub struct MinerInfo<A, M> {  // 这个必须是公开的
 }
 
 
-/// The module's configuration trait.
 pub trait Trait: timestamp::Trait + system::Trait {
-	// TODO: Add other types and constants required configure this module.
 
 	/// The overarching event type.
 	type Bond: Get<BalanceOf<Self>>;
@@ -40,18 +29,18 @@ pub trait Trait: timestamp::Trait + system::Trait {
 	type Currency: Currency<Self::AccountId> + ReservableCurrency<Self::AccountId>;
 }
 
-// This module's storage items.
+
 decl_storage! {
 	trait Store for Module<T: Trait> as TemplateModule {
 		// Just a dummy storage item.
 		AllMiners get(fn allminers): map T::AccountId => MinerInfo<T::AccountId, T::Moment>;
-		TokenInfo get(fn tokeninfo): map (T::AccountId, Vec<u8>) => Vec<u8>;
-		AllRegisters get(fn allregisters): map Vec<u8> => T::AccountId;
+		TokenInfo: double_map T::AccountId, blake2_256(Vec<u8>) => Vec<u8>;
+		AllRegisters get(fn allregisters):  map Vec<u8> => T::AccountId;
 		MinersCount: u64;
 	}
 }
 
-// The module's dispatchable functions.
+
 decl_module! {
 	/// The module declaration.
 	pub struct Module<T: Trait> for enum Call where origin: T::Origin {
@@ -71,12 +60,15 @@ decl_module! {
 			let bond :BalanceOf<T> = T::Bond::get();
 			debug::RuntimeLogger::init();
 			debug::print!("bond---------------------------------{:?}", bond);
-			T::Currency::reserve(&who, bond)
+			T::Currency::reserve(&who, bond.clone())
 				.map_err(|_| "Proposer's balance too low, you can't registe!")?;
 			// 抵押不够不给注册
 
 			let register_time = <timestamp::Module<T>>::get();
 			// 添加注册时间
+
+			ensure!(!(who.clone()==father_address.clone()), "the father_address can't be youself!");
+			// 上上级不能是自己本身。
 
 			let mut minerinfo = MinerInfo{
 				hardware_id:  hardware_id.clone(),
@@ -87,8 +79,8 @@ decl_module! {
 				machine_owner: who.clone(),
 			};
 
-			if <AllMiners<T>>::exists(&father_address){
-				let grandpa = Self::allminers(&who).grandpa_address;
+			if <AllMiners<T>>::exists(father_address.clone()){
+				let grandpa = Self::allminers(who.clone()).grandpa_address;
 				minerinfo.grandpa_address = grandpa;
 			}
 			// 如果存在上级 则添加上上级 如果不存在则上级是None
@@ -99,7 +91,7 @@ decl_module! {
 			<AllRegisters<T>>::insert(hardware_id.clone(), who.clone());
 			// 添加映射 矿机id => 用户id
 
-			let mut allminerscount = MinersCount::get();
+			let allminerscount = MinersCount::get();
 			let new_allminerscount = allminerscount.checked_add(1).ok_or("Overflow adding a miner to total supply!")?;
 			MinersCount::put(new_allminerscount);
 			// 矿机数加1
@@ -110,18 +102,52 @@ decl_module! {
 			Ok(())
 		}
 
+		#[weight = SimpleDispatchInfo::FixedNormal(500_000)]
+		pub fn kill_register(origin) -> Result{
+			/// 注销注册的账户 并归还抵押金额
+			let who = ensure_signed(origin)?;
+
+			ensure!(<AllMiners<T>>::exists(who.clone()), "you have been not registered!");
+			// 如果还没有注册， 则直接退出
+
+			let bond :BalanceOf<T> = T::Bond::get();
+			T::Currency::unreserve(&who, bond.clone());
+			// 归还抵押
+
+			let hardware_id = <AllMiners<T>>::get(who.clone()).hardware_id;
+			// 获取硬件id
+
+			<AllMiners<T>>::remove(who.clone());
+			// 从矿机列表删除该账户
+
+			<AllRegisters<T>>::remove(hardware_id.clone());
+			// 从AllRegisters列表中删除记录
+
+			let minercount = MinersCount::get();
+			let new_minercount = minercount - 1;
+			MinersCount::put(new_minercount);
+			// 矿机数减掉1
+
+			<TokenInfo<T>>::remove_prefix(who.clone());
+			//删除掉相关的tokeninfo
+
+			Self::deposit_event(RawEvent::KillRegisterEvent(who.clone()));
+
+			Ok(())
+		}
+
 
 		#[weight = SimpleDispatchInfo::FixedNormal(500_000)]
 		pub fn add_token_info(origin, tokenaddress_add_symble: Vec<u8>, tokenaddress: Vec<u8>) -> Result{
 			/// 给注册过的用户添加token信息
 			let who = ensure_signed(origin)?;
-			ensure!(<AllMiners<T>>::exists(&who), "you have been not registered!");
+			ensure!(<AllMiners<T>>::exists(who.clone()), "you have been not registered!");
 			// 如果还没有注册， 则直接退出
 
-			ensure!(!<TokenInfo<T>>::exists((&who, &tokenaddress_add_symble)), "the token info have been existsting.");
+			ensure!(!<TokenInfo<T>>::exists(who.clone(), tokenaddress_add_symble.clone()), "the token info have been existsting.");
 			// 如果已经存在这个token信息  则不再添加。
 
-			<TokenInfo<T>>::insert((who.clone(), tokenaddress_add_symble.clone()), tokenaddress.clone());
+			<TokenInfo<T>>::insert(who.clone(), tokenaddress_add_symble.clone(), tokenaddress.clone());
 			Self::deposit_event(RawEvent::AddTokenInfoEvent(who, tokenaddress_add_symble));
 
 			Ok(())
@@ -131,12 +157,12 @@ decl_module! {
 		#[weight = SimpleDispatchInfo::FixedNormal(500_000)]
 		pub fn remove_token_info(origin, tokenaddress_add_symble: Vec<u8>) -> Result{
 			let who = ensure_signed(origin)?;
-			ensure!(<AllMiners<T>>::exists(&who), "you have been not registered!");
+			ensure!(<AllMiners<T>>::exists(who.clone()), "you have been not registered!");
 			// 不是已经注册的账户，不可查。
-			ensure!(<TokenInfo<T>>::exists((&who, &tokenaddress_add_symble)), "the token info not exists.");
+			ensure!(<TokenInfo<T>>::exists(who.clone(), tokenaddress_add_symble.clone()), "the token info not exists.");
 			// 如果本来就不存在， 则退出。
 
-			<TokenInfo<T>>::remove((&who, &tokenaddress_add_symble));
+			<TokenInfo<T>>::remove(who.clone(), tokenaddress_add_symble.clone());
 			// 删除该key
 
 			Self::deposit_event(RawEvent::RemoveTokenInfoEvent(who, tokenaddress_add_symble));
@@ -154,71 +180,74 @@ decl_event!(
 		RegisterEvent(u64, AccountId, Moment),
 		AddTokenInfoEvent(AccountId, Vec<u8>),
 		RemoveTokenInfoEvent(AccountId, Vec<u8>),
+		KillRegisterEvent(AccountId),
 	}
 );
 
-/// tests for this module
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	use primitives::H256;
-	use support::{impl_outer_origin, assert_ok, parameter_types, weights::Weight};
-	use sp_runtime::{
-		traits::{BlakeTwo256, IdentityLookup}, testing::Header, Perbill,
-	};
-
-	impl_outer_origin! {
-		pub enum Origin for Test {}
-	}
-
-	// For testing the module, we construct most of a mock runtime. This means
-	// first constructing a configuration type (`Test`) which `impl`s each of the
-	// configuration traits of modules we want to use.
-	#[derive(Clone, Eq, PartialEq)]
-	pub struct Test;
-	parameter_types! {
-		pub const BlockHashCount: u64 = 250;
-		pub const MaximumBlockWeight: Weight = 1024;
-		pub const MaximumBlockLength: u32 = 2 * 1024;
-		pub const AvailableBlockRatio: Perbill = Perbill::from_percent(75);
-	}
-	impl system::Trait for Test {
-		type Origin = Origin;
-		type Call = ();
-		type Index = u64;
-		type BlockNumber = u64;
-		type Hash = H256;
-		type Hashing = BlakeTwo256;
-		type AccountId = u64;
-		type Lookup = IdentityLookup<Self::AccountId>;
-		type Header = Header;
-		type Event = ();
-		type BlockHashCount = BlockHashCount;
-		type MaximumBlockWeight = MaximumBlockWeight;
-		type MaximumBlockLength = MaximumBlockLength;
-		type AvailableBlockRatio = AvailableBlockRatio;
-		type Version = ();
-	}
-	impl Trait for Test {
-		type Event = ();
-	}
-	type TemplateModule = Module<Test>;
-
-	// This function basically just builds a genesis storage key/value store according to
-	// our desired mockup.
-	fn new_test_ext() -> runtime_io::TestExternalities {
-		system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
-	}
-
-	#[test]
-	fn it_works_for_default_value() {
-		new_test_ext().execute_with(|| {
-			// Just a dummy test for the dummy funtion `do_something`
-			// calling the `do_something` function with a value 42
-			assert_ok!(TemplateModule::do_something(Origin::signed(1), 42));
-			// asserting that the stored value is equal to what we stored
-			assert_eq!(TemplateModule::something(), Some(42));
-		});
-	}
-}
+// tests for this module
+//#[cfg(test)]
+//mod tests {
+//	use super::*;
+//
+//	use primitives::H256;
+//	use support::{impl_outer_origin, assert_ok, parameter_types, weights::Weight};
+//	use sp_runtime::{
+//		traits::{BlakeTwo256, IdentityLookup}, testing::Header, Perbill,
+//	};
+//
+//	impl_outer_origin! {
+//		pub enum Origin for Test {}
+//	}
+//
+//	// For testing the module, we construct most of a mock runtime. This means
+//	// first constructing a configuration type (`Test`) which `impl`s each of the
+//	// configuration traits of modules we want to use.
+//	#[derive(Clone, Eq, PartialEq)]
+//	pub struct Test;
+//	parameter_types! {
+//		pub const BlockHashCount: u64 = 250;
+//		pub const MaximumBlockWeight: Weight = 1024;
+//		pub const MaximumBlockLength: u32 = 2 * 1024;
+//		pub const AvailableBlockRatio: Perbill = Perbill::from_percent(75);
+//	}
+//	impl system::Trait for Test {
+//		type Origin = Origin;
+//		type Call = ();
+//		type Index = u64;
+//		type BlockNumber = u64;
+//		type Hash = H256;
+//		type Hashing = BlakeTwo256;
+//		type AccountId = u64;
+//		type Lookup = IdentityLookup<Self::AccountId>;
+//		type Header = Header;
+//		type Event = ();
+//		type BlockHashCount = BlockHashCount;
+//		type MaximumBlockWeight = MaximumBlockWeight;
+//		type MaximumBlockLength = MaximumBlockLength;
+//		type AvailableBlockRatio = AvailableBlockRatio;
+//		type Version = ();
+//	}
+//	impl Trait for Test {
+//		type Event = ();
+//
+//
+//	}
+//	type TemplateModule = Module<Test>;
+//
+//	// This function basically just builds a genesis storage key/value store according to
+//	// our desired mockup.
+//	fn new_test_ext() -> runtime_io::TestExternalities {
+//		system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
+//	}
+//
+//	#[test]
+//	fn it_works_for_default_value() {
+//		new_test_ext().execute_with(|| {
+//			// Just a dummy test for the dummy funtion `do_something`
+//			// calling the `do_something` function with a value 42
+//			assert_ok!(TemplateModule::do_something(Origin::signed(1), 42));
+//			// asserting that the stored value is equal to what we stored
+//			assert_eq!(TemplateModule::something(), Some(42));
+//		});
+//	}
+//}
