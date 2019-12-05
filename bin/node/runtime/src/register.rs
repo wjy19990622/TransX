@@ -51,6 +51,12 @@ decl_module! {
 		pub fn register(origin, hardware_id: Vec<u8>, father_Address: T::AccountId, machine_state: Vec<u8>) -> Result{
 			/// register the machine.
 			let who = ensure_signed(origin)?;
+
+			ensure!(!(hardware_id.len() == 0), "please put into the hardware_id.");
+			// 硬件id不能是空。
+			ensure!(!(machine_state.len() == 0), "please put into the machine_state.");
+			// 硬件状态不能为空。
+
 			ensure!(!<AllMiners<T>>::exists(who.clone()), "you have been registed!");
 			// 账户已经存在不需要注册！
 
@@ -138,34 +144,42 @@ decl_module! {
 
 
 		#[weight = SimpleDispatchInfo::FixedNormal(500_000)]
-		pub fn add_token_info(origin, tokenaddress_add_symble: Vec<u8>, tokenaddress: Vec<u8>) -> Result{
+		pub fn add_token_info(origin, tokenaddress_add_symbol: Vec<u8>, tokenaddress: Vec<u8>) -> Result{
 			/// 给注册过的用户添加token信息
 			let who = ensure_signed(origin)?;
+
+			ensure!(!(tokenaddress_add_symbol.len() == 0), "please put into the tokenaddress_add_symbol.");
+			ensure!(!(tokenaddress.len()==0), "please put into the tokenaddress.");
+
+
 			ensure!(<AllMiners<T>>::exists(who.clone()), "you have been not registered!");
 			// 如果还没有注册， 则直接退出
 
-			ensure!(!<TokenInfo<T>>::exists(who.clone(), tokenaddress_add_symble.clone()), "the token info have been existsting.");
+			ensure!(!<TokenInfo<T>>::exists(who.clone(), tokenaddress_add_symbol.clone()), "the token info have been existsting.");
 			// 如果已经存在这个token信息  则不再添加。
 
-			<TokenInfo<T>>::insert(who.clone(), tokenaddress_add_symble.clone(), tokenaddress.clone());
-			Self::deposit_event(RawEvent::AddTokenInfoEvent(who, tokenaddress_add_symble));
+			<TokenInfo<T>>::insert(who.clone(), tokenaddress_add_symbol.clone(), tokenaddress.clone());
+			Self::deposit_event(RawEvent::AddTokenInfoEvent(who, tokenaddress_add_symbol));
 
 			Ok(())
 
 			}
 
 		#[weight = SimpleDispatchInfo::FixedNormal(500_000)]
-		pub fn remove_token_info(origin, tokenaddress_add_symble: Vec<u8>) -> Result{
+		pub fn remove_token_info(origin, tokenaddress_add_symbol: Vec<u8>) -> Result{
 			let who = ensure_signed(origin)?;
+
+			ensure!(!(tokenaddress_add_symbol.len() == 0), "please put into the tokenaddress_add_symbol.");
+
 			ensure!(<AllMiners<T>>::exists(who.clone()), "you have been not registered!");
 			// 不是已经注册的账户，不可查。
-			ensure!(<TokenInfo<T>>::exists(who.clone(), tokenaddress_add_symble.clone()), "the token info not exists.");
+			ensure!(<TokenInfo<T>>::exists(who.clone(), tokenaddress_add_symbol.clone()), "the token info not exists.");
 			// 如果本来就不存在， 则退出。
 
-			<TokenInfo<T>>::remove(who.clone(), tokenaddress_add_symble.clone());
+			<TokenInfo<T>>::remove(who.clone(), tokenaddress_add_symbol.clone());
 			// 删除该key
 
-			Self::deposit_event(RawEvent::RemoveTokenInfoEvent(who, tokenaddress_add_symble));
+			Self::deposit_event(RawEvent::RemoveTokenInfoEvent(who, tokenaddress_add_symbol));
 			Ok(())
 		}
 	}
