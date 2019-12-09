@@ -60,6 +60,10 @@ pub use staking::StakerStatus;
 /// Implementations of some helper traits passed into runtime modules as associated types.
 pub mod impls;
 pub mod register;
+
+mod mine;
+mod mine_linked;
+
 use impls::{CurrencyToVoteHandler, Author, LinearWeightToFee, TargetedFeeAdjustment};
 
 /// Constant values used within the runtime.
@@ -634,6 +638,11 @@ impl transx::Trait for Runtime {
 	type FoundingTeamProportion = FoundingTeamProportion;
 }
 
+impl mine::Trait for Runtime {
+	type Event = Event;
+	type MineIndex = u64;
+}
+
 construct_runtime!(
 	pub enum Runtime where
 		Block = Block,
@@ -667,6 +676,7 @@ construct_runtime!(
 		Nicks: nicks::{Module, Call, Storage, Event<T>},
 		Transx: transx::{Module, Call, Storage, Event<T>},
 		Register: register::{Module, Call, Storage, Event<T>},
+		Mine: mine::{Module, Storage, Call, Event<T>},
 	}
 );
 

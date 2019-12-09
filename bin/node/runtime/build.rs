@@ -23,8 +23,11 @@ fn main() {
 			path: "../../../utils/wasm-builder",
 			version: "1.0.8",
 		},
+		// WasmBuilderSource::Crates("1.0.8"),
 		// This instructs LLD to export __heap_base as a global variable, which is used by the
 		// external memory allocator.
 		"-Clink-arg=--export=__heap_base",
 	);
 }
+
+
