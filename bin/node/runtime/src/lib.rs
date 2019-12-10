@@ -634,6 +634,18 @@ impl transx::Trait for Runtime {
 	type FoundingTeamProportion = FoundingTeamProportion;
 }
 
+// Add `workforce` module
+parameter_types! {
+	// 将算力汇总信息归档到链上并不再修改
+	pub const ArchiveDuration: BlockNumber = 10 * MINUTES;
+}
+
+pub mod workforce;
+impl workforce for Runtime {
+	type Event = Event;
+	type ArchiveDuration = ArchiveDuration;
+}
+
 construct_runtime!(
 	pub enum Runtime where
 		Block = Block,
@@ -667,6 +679,7 @@ construct_runtime!(
 		Nicks: nicks::{Module, Call, Storage, Event<T>},
 		Transx: transx::{Module, Call, Storage, Event<T>},
 		Register: register::{Module, Call, Storage, Event<T>},
+		Workforce: workforce::{Module, Call, Storage, Event<T>},
 	}
 );
 
