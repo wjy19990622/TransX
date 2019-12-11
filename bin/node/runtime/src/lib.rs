@@ -641,6 +641,7 @@ impl transx::Trait for Runtime {
 impl mine::Trait for Runtime {
 	type Event = Event;
 	type MineIndex = u64;
+//	type  = BlockNumber;
 }
 
 construct_runtime!(
