@@ -13,7 +13,7 @@ use codec::{Encode, Decode};
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct MinerInfo<A, M> {
 	hardware_id: Vec<u8>,
-	father_address: A,
+	father_address: Option<A>,
 	grandpa_address: Option<A>,
 	register_time: M,
 	machine_state: Vec<u8>,  // 暂时用字符串表示
@@ -24,7 +24,7 @@ pub struct MinerInfo<A, M> {
 pub trait Trait: timestamp::Trait + system::Trait {
 
 	/// The overarching event type.
-	type Bond: Get<BalanceOf<Self>>;
+	type PledgeAmount: Get<BalanceOf<Self>>;
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 	type Currency: Currency<Self::AccountId> + ReservableCurrency<Self::AccountId>;
 }
@@ -34,7 +34,7 @@ decl_storage! {
 	trait Store for Module<T: Trait> as TemplateModule {
 		// Just a dummy storage item.
 		AllMiners get(fn allminers): map T::AccountId => MinerInfo<T::AccountId, T::Moment>;
-		TokenInfo: double_map T::AccountId, blake2_256(Vec<u8>) => Vec<u8>;
+		TokenInfo: double_map hasher(twox_64_concat) T::AccountId, blake2_256(Vec<u8>) => Vec<u8>;
 		AllRegisters get(fn allregisters):  map Vec<u8> => T::AccountId;
 		MinersCount: u64;
 	}
@@ -53,9 +53,8 @@ decl_module! {
 			let who = ensure_signed(origin)?;
 
 			ensure!(!(hardware_id.len() == 0), "please put into the hardware_id.");
-			// 硬件id不能是空。
 			ensure!(!(machine_state.len() == 0), "please put into the machine_state.");
-			// 硬件状态不能为空。
+			// Vec<u8>类型参数不能为空
 
 			ensure!(!<AllMiners<T>>::exists(who.clone()), "you have been registed!");
 			// 账户已经存在不需要注册！
@@ -63,7 +62,7 @@ decl_module! {
 			ensure!(!<AllRegisters<T>>::exists(hardware_id.clone()), "the hardware_id is exists!");
 			// 硬件已经被注册则不能再次注册。
 
-			let bond :BalanceOf<T> = T::Bond::get();
+			let bond :BalanceOf<T> = T::PledgeAmount::get();
 			debug::RuntimeLogger::init();
 			debug::print!("bond---------------------------------{:?}", bond);
 			T::Currency::reserve(&who, bond.clone())
@@ -73,26 +72,27 @@ decl_module! {
 			let register_time = <timestamp::Module<T>>::get();
 			// 添加注册时间
 
-			ensure!(!(who.clone()==father_Address.clone()), "the father_address can't be youself!");
-			// 上上级不能是自己本身。
-
 			let mut minerinfo = MinerInfo{
 				hardware_id:  hardware_id.clone(),
-				father_address: father_Address.clone(),
+				father_address: None,  // 上级默认是None
 				grandpa_address: None,  // 上上级默认是None
 				register_time: register_time.clone(),
 				machine_state: machine_state,
 				machine_owner: who.clone(),
 			};
 
-			if <AllMiners<T>>::exists(father_Address.clone()){
-				let grandpa = Self::allminers(father_Address.clone()).father_address;
+			if who.clone() != father_Address.clone(){
+				minerinfo.father_address = Some(father_Address.clone());
+			}
+			// 上级不能是自己  默认一定要填一个  填自己的话就返回none
 
-				if grandpa.clone() != who.clone(){
-					minerinfo.grandpa_address = Some(grandpa);
-					// grandpa_address 不能是自己
+			if <AllMiners<T>>::exists(father_Address.clone()){
+				let tmpt =  <AllMiners<T>>::get(father_Address.clone()).father_address.unwrap_or(who.clone());
+				if who.clone() != tmpt {
+					minerinfo.grandpa_address = Some(tmpt);
 				}
 			}
+			// 上上级不能是自己
 
 			<AllMiners<T>>::insert(who.clone(), minerinfo.clone());
 			// 添加矿机信息完毕
@@ -119,7 +119,7 @@ decl_module! {
 			ensure!(<AllMiners<T>>::exists(who.clone()), "you have been not registered!");
 			// 如果还没有注册， 则直接退出
 
-			let bond :BalanceOf<T> = T::Bond::get();
+			let bond :BalanceOf<T> = T::PledgeAmount::get();
 			T::Currency::unreserve(&who, bond.clone());
 			// 归还抵押
 
@@ -153,6 +153,7 @@ decl_module! {
 
 			ensure!(!(tokenaddress_add_symbol.len() == 0), "please put into the tokenaddress_add_symbol.");
 			ensure!(!(tokenaddress.len()==0), "please put into the tokenaddress.");
+			// Vec<u8>参数不能为空
 
 
 			ensure!(<AllMiners<T>>::exists(who.clone()), "you have been not registered!");
