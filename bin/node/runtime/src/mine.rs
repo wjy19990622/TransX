@@ -1,17 +1,17 @@
 use support::{debug,decl_storage, decl_module,decl_event, StorageValue, StorageMap,Parameter,
 			  dispatch::Result, ensure,dispatch::Vec,traits::Currency};
+use support::traits::{Get, ReservableCurrency};
 use system::{ensure_signed};
 use sp_runtime::traits::{Hash,SimpleArithmetic, Bounded, One, Member,CheckedAdd};
-//use node_primitives::BlockNumber;
 
 use codec::{Encode, Decode};
-
 use crate::mine_linked::{PersonMineWorkForce,PersonMine,MineParm,PersonMineRecord,BLOCK_NUMS};
 //use node_primitives::BlockNumber;
 use crate::register::{AllMiners,Trait as RegisterTrait};
 
 
-pub trait Trait: balances::Trait + RegisterTrait{
+
+pub trait Trait: balances::Trait + RegisterTrait{  // 继承 register模块
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 	type MineIndex: Parameter + Member + SimpleArithmetic + Bounded + Default + Copy;
 //	type TranRuntime: RegisterTrait;
@@ -65,8 +65,10 @@ decl_module! {
         	// "symbol":"ETH","amount":"100",
         	// "protocol":"ScanProtocol","decimal":18,
         	// "blockchain":"ETH",
-        	// "memo":"hello,octa"}
+        	// "memo":"hello,octa"}  reserved_balance
         	let sender = ensure_signed(origin)?;
+        	ensure!(<AllMiners<T>>::exists(sender.clone()), "account not register");
+        	ensure!(T::Currency::reserved_balance(&sender)>=T::PledgeAmount::get(),"your reservable currency is not enough");
         	ensure!(!<OwnerMineRecord<T>>::exists(tx.clone()), "tx already exists");
         	ensure!(address != to_address,"you cannot transfer  to yourself");
         	ensure!(usdt_nums<u32::max_value(),"usdt_nums is overflow");

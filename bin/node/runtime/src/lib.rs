@@ -370,7 +370,7 @@ impl membership::Trait<membership::Instance1> for Runtime {
 parameter_types! {
 	pub const ProposalBond: Permill = Permill::from_percent(5);
 	pub const ProposalBondMinimum: Balance = 1 * DOLLARS;
-	pub const BondValue: Balance = 5*DOLLARS;  // 自己添加的参数
+//	pub const PledgeAmount: Balance = 5*DOLLARS;  // 自己添加的参数
 	pub const SpendPeriod: BlockNumber = 1 * DAYS;
 	pub const Burn: Permill = Permill::from_percent(50);
 }
@@ -387,7 +387,7 @@ impl treasury::Trait for Runtime {
 	type Burn = Burn;
 }
 impl register::Trait for Runtime {
-	type Bond = BondValue;
+	type PledgeAmount = PledgeAmount;
 	type Event = Event;
 	type Currency = Balances;
 }
