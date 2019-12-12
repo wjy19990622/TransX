@@ -8,11 +8,13 @@ use codec::{Encode, Decode};
 
 use crate::mine_linked::{PersonMineWorkForce,PersonMine,MineParm,PersonMineRecord,BLOCK_NUMS};
 //use node_primitives::BlockNumber;
+use crate::register::{AllMiners,Trait as RegisterTrait};
 
 
-pub trait Trait: balances::Trait + timestamp::Trait{
+pub trait Trait: balances::Trait + RegisterTrait{
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 	type MineIndex: Parameter + Member + SimpleArithmetic + Bounded + Default + Copy;
+//	type TranRuntime: RegisterTrait;
 }
 
 type BlockNumberOf<T> = <T as system::Trait>::BlockNumber;  // u32
@@ -91,7 +93,7 @@ decl_module! {
 
 impl<T: Trait> Module<T> {
 	fn mining(mine_parm:MineParm,sender: T::AccountId)->Result{
-
+		ensure!(<AllMiners<T>>::exists(sender.clone()), "account not register");
 		let block_num = <system::Module<T>>::block_number(); // 获取区块的高度
 		let day_block_nums = <BlockNumberOf<T>>::from(BLOCK_NUMS);
 		// let now_day = block_num.checked_div(&day_block_nums).ok_or("mining function: div causes error")?;

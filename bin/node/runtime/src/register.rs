@@ -33,10 +33,10 @@ pub trait Trait: timestamp::Trait + system::Trait {
 decl_storage! {
 	trait Store for Module<T: Trait> as TemplateModule {
 		// Just a dummy storage item.
-		AllMiners get(fn allminers): map T::AccountId => MinerInfo<T::AccountId, T::Moment>;
-		TokenInfo: double_map T::AccountId, blake2_256(Vec<u8>) => Vec<u8>;
-		AllRegisters get(fn allregisters):  map Vec<u8> => T::AccountId;
-		MinersCount: u64;
+		pub AllMiners get(fn allminers): map T::AccountId => MinerInfo<T::AccountId, T::Moment>;
+		pub TokenInfo: double_map T::AccountId, blake2_256(Vec<u8>) => Vec<u8>;
+		pub AllRegisters get(fn allregisters):  map Vec<u8> => T::AccountId;
+		pub MinersCount: u64;
 	}
 }
 
