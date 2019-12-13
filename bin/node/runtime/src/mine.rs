@@ -10,8 +10,8 @@ use crate::mine_linked::{PersonMineWorkForce,PersonMine,MineParm,PersonMineRecor
 use crate::register::{AllMiners,Trait as RegisterTrait};
 
 
-
-pub trait Trait: balances::Trait + RegisterTrait{  // 继承 register模块
+// 继承 register 模块,方便调用register里面的 store
+pub trait Trait: balances::Trait + RegisterTrait{
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 	type MineIndex: Parameter + Member + SimpleArithmetic + Bounded + Default + Copy;
 //	type TranRuntime: RegisterTrait;
