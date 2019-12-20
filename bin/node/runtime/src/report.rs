@@ -128,10 +128,10 @@ decl_module! {
 		illegalman: T::AccountId, tx_amount: T::Balance, usdt_amount: T::Balance, decimals: u32) -> Result{
 			let who = ensure_signed(origin)?;
 
-			// 如果作弊者和举报人有至少一个不在注册名单里， 则不给举报。
+			// 如果作弊者和举报人有至少有一个在黑名单里， 则不给举报。
 			// TODO 这个is_register_member方法需要进一步完善
-			ensure!( !(Self::is_register_member(who.clone()) &&
-			Self::is_register_member(illegalman.clone())), "someone don't exists in register_list.");
+			ensure!( !(<BlackList<T>>::exists(who.clone()) &&
+			<BlackList<T>>::exists(illegalman.clone())), "someone don't exists in register_list.");
 
 			//  计算交易tx哈希值
 			let tx_hash = tx.using_encoded(<T as system::Trait>::Hashing::hash);
@@ -181,9 +181,9 @@ decl_module! {
 			// 如果这个议会成员是作弊者（被举报方），则禁止其投票。
 			ensure!(!(illegalman.clone() == who.clone()), "you are being reported, can't vote.");
 
-			// 如果举报者和作弊者有至少一个不在注册列表中， 则退出。
-			ensure!( !(Self::is_register_member(who.clone()) &&
-			Self::is_register_member(illegalman.clone())), "someone don't exists in register_list.");
+			// 如果举报者和作弊者有至少有一个在黑名单列表中， 则退出。
+			ensure!( !(<BlackList<T>>::exists(who.clone()) &&
+			<BlackList<T>>::exists(illegalman.clone())), "someone don't exists in register_list.");
 
 			let now = <system::Module<T>>::block_number();
 			// 过期删除相关信息  并且退出
@@ -433,18 +433,18 @@ impl<T: Trait> Module<T> {
 		// 真的作弊
 		if is_punish == IsPunished::YES {
 			// 惩罚作弊者的金额
-			if Self::is_register_member(vote.illegal_man.clone()) {
+			if <BlackList<T>>::exists(vote.illegal_man.clone()) {
 				postive = T::IllegalPunishment::get();
 			}
 			// 奖励举报者的总金额
-			if Self::is_register_member(vote.reporter.clone()) {
+			if <BlackList<T>>::exists(vote.reporter.clone()) {
 				negative = T::ReportReward::get();
 			}
 		}
 		// 虚假举报
 		else {
 			// 惩罚举报者的金额
-			if Self::is_register_member(vote.reporter.clone()) {
+			if <BlackList<T>>::exists(vote.reporter.clone()) {
 				postive += T::ReportReserve::get().clone();
 			}
 		}
@@ -454,7 +454,7 @@ impl<T: Trait> Module<T> {
 
 		for i in 0..all_mans.clone().count() {
 			if let Some(peaple) = all_mans.next() {
-				if Self::is_register_member(peaple.clone()) {
+				if <BlackList<T>>::exists(peaple.clone()) {
 					negative += T::CouncilReward::get().clone();
 				}
 			};
@@ -478,11 +478,11 @@ impl<T: Trait> Module<T> {
 		// 如果作弊是真的
 		if is_punish == IsPunished::YES {
 			// 惩罚作弊者
-			if Self::is_register_member(illagalman.clone()) {
+			if <BlackList<T>>::exists(illagalman.clone()) {
 				T::Currency0::slash_reserved(&illagalman, T::IllegalPunishment::get());
 			}
 			// 解除抵押并奖励举报人
-			if Self::is_register_member(reporter.clone()) {
+			if <BlackList<T>>::exists(reporter.clone()) {
 				T::Currency0::unreserve(&reporter, T::ReportReserve::get());
 				T::Currency0::deposit_creating(&reporter, T::ReportReward::get());
 			}
@@ -491,7 +491,7 @@ impl<T: Trait> Module<T> {
 		// 虚假举报
 		else {
 			// 扣除举报者金额
-			if Self::is_register_member(reporter.clone()) {
+			if <BlackList<T>>::exists(reporter.clone()) {
 				T::Currency0::slash_reserved(&reporter, T::ReportReserve::get());
 			}
 		}
@@ -501,7 +501,7 @@ impl<T: Trait> Module<T> {
 
 		for i in 0..all_mans.clone().count() {
 			if let Some(peaple) = all_mans.next() {
-				if Self::is_register_member(peaple.clone()) {
+				if <BlackList<T>>::exists(peaple.clone()) {
 					T::Currency0::deposit_creating(&peaple, T::CouncilReward::get());
 				}
 			};
