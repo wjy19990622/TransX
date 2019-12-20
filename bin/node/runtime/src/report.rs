@@ -15,6 +15,7 @@ use sp_runtime::traits::{
 //use register;
 use crate::register::{AllMiners, BlackList, Trait as RegisterTrait};
 use crate::register;
+use elections_phragmen;
 
 const MODULE_ID: ModuleId = ModuleId(*b"py/trsry");
 
@@ -65,7 +66,7 @@ pub enum VoteResult{
 	NoPASS,
 }
 
-pub trait Trait: balances::Trait + RegisterTrait{
+pub trait Trait: balances::Trait + RegisterTrait + elections_phragmen::Trait{
 
 	// 议会成员
 	type ConcilOrigin: EnsureOrigin<Self::Origin, Success=Self::AccountId>;
@@ -331,7 +332,12 @@ impl<T: Trait> Module<T> {
 	// 这个方法用来判断是否是议会成员
 	// TODO 是否是议员
 	pub fn is_concil_member(who: T::AccountId) -> bool {
-		false
+		if <elections_phragmen::Module<T>>::is_member(&who){
+			true
+		}
+		else {
+			false
+		}
 	}
 
 	// 是否在矿机的注册名单里面

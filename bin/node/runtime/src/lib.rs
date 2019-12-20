@@ -338,7 +338,7 @@ parameter_types! {
 
 impl elections_phragmen::Trait for Runtime {
 	type Event = Event;
-	type Currency = Balances;
+	type Currency2 = Balances;
 	type CurrencyToVote = CurrencyToVoteHandler;
 	type CandidacyBond = CandidacyBond;
 	type VotingBond = VotingBond;

@@ -100,16 +100,16 @@ const MODULE_ID: LockIdentifier = *b"phrelect";
 /// The maximum votes allowed per voter.
 pub const MAXIMUM_VOTE: usize = 16;
 
-type BalanceOf<T> = <<T as Trait>::Currency as Currency<<T as system::Trait>::AccountId>>::Balance;
+type BalanceOf<T> = <<T as Trait>::Currency2 as Currency<<T as system::Trait>::AccountId>>::Balance;
 type NegativeImbalanceOf<T> =
-	<<T as Trait>::Currency as Currency<<T as system::Trait>::AccountId>>::NegativeImbalance;
+	<<T as Trait>::Currency2 as Currency<<T as system::Trait>::AccountId>>::NegativeImbalance;
 
 pub trait Trait: system::Trait {
 	/// The overarching event type.c
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 
 	/// The currency that people are electing with.
-	type Currency:
+	type Currency2:
 		LockableCurrency<Self::AccountId, Moment=Self::BlockNumber> +
 		ReservableCurrency<Self::AccountId>;
 
@@ -208,20 +208,20 @@ decl_module! {
 			ensure!(!votes.is_empty(), "must vote for at least one candidate.");
 
 			ensure!(
-				value > T::Currency::minimum_balance(),
+				value > T::Currency2::minimum_balance(),
 				"cannot vote with stake less than minimum balance"
 			);
 
 			if !Self::is_voter(&who) {
 				// first time voter. Reserve bond.
-				T::Currency::reserve(&who, T::VotingBond::get())
+				T::Currency2::reserve(&who, T::VotingBond::get())
 					.map_err(|_| "voter can not pay voting bond")?;
 			}
 			// Amount to be locked up.
-			let locked_balance = value.min(T::Currency::total_balance(&who));
+			let locked_balance = value.min(T::Currency2::total_balance(&who));
 
 			// lock
-			T::Currency::set_lock(
+			T::Currency2::set_lock(
 				MODULE_ID,
 				&who,
 				locked_balance,
@@ -277,12 +277,12 @@ decl_module! {
 			let valid = Self::is_defunct_voter(&target);
 			if valid {
 				// reporter will get the voting bond of the target
-				T::Currency::repatriate_reserved(&target, &reporter, T::VotingBond::get())?;
+				T::Currency2::repatriate_reserved(&target, &reporter, T::VotingBond::get())?;
 				// remove the target. They are defunct.
 				Self::do_remove_voter(&target, false);
 			} else {
 				// slash the bond of the reporter.
-				let imbalance = T::Currency::slash_reserved(&reporter, T::VotingBond::get()).0;
+				let imbalance = T::Currency2::slash_reserved(&reporter, T::VotingBond::get()).0;
 				T::BadReport::on_unbalanced(imbalance);
 				// remove the reporter.
 				Self::do_remove_voter(&reporter, false);
@@ -316,7 +316,7 @@ decl_module! {
 			ensure!(!Self::is_member(&who), "member cannot re-submit candidacy");
 			ensure!(!Self::is_runner(&who), "runner cannot re-submit candidacy");
 
-			T::Currency::reserve(&who, T::CandidacyBond::get())
+			T::Currency2::reserve(&who, T::CandidacyBond::get())
 				.map_err(|_| "candidate does not have enough funds")?;
 
 			<Candidates<T>>::mutate(|c| c.insert(index, who));
@@ -343,7 +343,7 @@ decl_module! {
 			// mutually exclusive. Hence, we try one, and only then decode more storage.
 
 			if let Ok(_replacement) = Self::remove_and_replace_member(&who) {
-				T::Currency::unreserve(&who, T::CandidacyBond::get());
+				T::Currency2::unreserve(&who, T::CandidacyBond::get());
 				Self::deposit_event(RawEvent::MemberRenounced(who.clone()));
 
 				// safety guard to make sure we do only one arm. Better to read runners later.
@@ -356,7 +356,7 @@ decl_module! {
 			{
 				runners_with_stake.remove(index);
 				// unreserve the bond
-				T::Currency::unreserve(&who, T::CandidacyBond::get());
+				T::Currency2::unreserve(&who, T::CandidacyBond::get());
 				// update storage.
 				<RunnersUp<T>>::put(runners_with_stake);
 				// safety guard to make sure we do only one arm. Better to read runners later.
@@ -367,7 +367,7 @@ decl_module! {
 			if let Ok(index) = candidates.binary_search(&who) {
 				candidates.remove(index);
 				// unreserve the bond
-				T::Currency::unreserve(&who, T::CandidacyBond::get());
+				T::Currency2::unreserve(&who, T::CandidacyBond::get());
 				// update storage.
 				<Candidates<T>>::put(candidates);
 				// safety guard to make sure we do only one arm. Better to read runners later.
@@ -396,7 +396,7 @@ decl_module! {
 			let who = T::Lookup::lookup(who)?;
 
 			return Self::remove_and_replace_member(&who).map(|had_replacement| {
-				let (imbalance, _) = T::Currency::slash_reserved(&who, T::CandidacyBond::get());
+				let (imbalance, _) = T::Currency2::slash_reserved(&who, T::CandidacyBond::get());
 				T::KickedMember::on_unbalanced(imbalance);
 				Self::deposit_event(RawEvent::MemberKicked(who.clone()));
 
@@ -506,7 +506,7 @@ impl<T: Trait> Module<T> {
 	/// Check if `who` is currently an active member.
 	///
 	/// Limited number of members. Binary search. Constant time factor. O(1)
-	fn is_member(who: &T::AccountId) -> bool {
+	pub fn is_member(who: &T::AccountId) -> bool {
 		Self::members_ids().binary_search(who).is_ok()
 	}
 
@@ -565,10 +565,10 @@ impl<T: Trait> Module<T> {
 		// remove storage and lock.
 		<VotesOf<T>>::remove(who);
 		<StakeOf<T>>::remove(who);
-		T::Currency::remove_lock(MODULE_ID, who);
+		T::Currency2::remove_lock(MODULE_ID, who);
 
 		if unreserve {
-			T::Currency::unreserve(who, T::VotingBond::get());
+			T::Currency2::unreserve(who, T::VotingBond::get());
 		}
 	}
 
@@ -713,14 +713,14 @@ impl<T: Trait> Module<T> {
 				if new_members.binary_search_by_key(&c, |(m, _)| m.clone()).is_err()
 					&& !new_runners_up_ids.contains(&c)
 				{
-					let (imbalance, _) = T::Currency::slash_reserved(&c, T::CandidacyBond::get());
+					let (imbalance, _) = T::Currency2::slash_reserved(&c, T::CandidacyBond::get());
 					T::LoserCandidate::on_unbalanced(imbalance);
 				}
 			});
 
 			// Burn outgoing bonds
 			to_burn_bond.into_iter().for_each(|x| {
-				let (imbalance, _) = T::Currency::slash_reserved(&x, T::CandidacyBond::get());
+				let (imbalance, _) = T::Currency2::slash_reserved(&x, T::CandidacyBond::get());
 				T::LoserCandidate::on_unbalanced(imbalance);
 			});
 
