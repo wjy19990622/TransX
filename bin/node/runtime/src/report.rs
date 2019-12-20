@@ -113,6 +113,9 @@ decl_storage! {
 
 		// 已经通过但是还没有给予奖励的投票结果
 		pub RewardList get(fn rewardlist): Vec<VoteInfo<T::BlockNumber, T::AccountId, T::Balance, T::Hash>>;
+
+		// 进入黑名单的所有信息 被永久保存  现在用它的交易hash做key
+		pub AllPunishmentInfo get(fn allpunishmentinfo): map T::Hash => VoteInfo<T::BlockNumber, T::AccountId, T::Balance, T::Hash>;
 	}
 }
 
@@ -233,10 +236,12 @@ decl_module! {
 				<RewardList<T>>::mutate(|a| a.push(voting.clone()));
 				Self::remove_mantxhashs(who.clone(),tx_hash.clone());
 				Self::remove_mantxhashs(illegalman.clone(),tx_hash.clone());
-				// 如果作弊是真  把名字加入黑名单  并且从注册列表中删除
+				// 如果作弊是真  把名字加入黑名单  并且从注册列表中删除  把该投票信息保存
 				if vote_result.1 == IsPunished::YES{
 					<BlackList<T>>::insert(illegalman.clone(), tx_hash.clone());
 					Self::kill_register(illegalman.clone());
+					// 永久保存该投票信息
+					<AllPunishmentInfo<T>>::insert(tx_hash.clone(), voting.clone());
 				}
 			}
 			Self::deposit_event(RawEvent::VoteEvent(illegalman.clone()));
