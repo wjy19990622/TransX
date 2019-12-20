@@ -76,6 +76,7 @@ pub trait Trait: balances::Trait + RegisterTrait + elections_phragmen::Trait{
 
 	// 极端情况下多少票数算是胜出
 	type Thredshould: Get<u32>;
+
 	// 议案过期时间
 	type ProposalExpire: Get<Self::BlockNumber>;
 
@@ -85,6 +86,7 @@ pub trait Trait: balances::Trait + RegisterTrait + elections_phragmen::Trait{
 	// 举报抵押金额
 	type ReportReserve: Get<BalanceOf<Self>>;
 
+	// 举报奖励
 	type ReportReward: Get<BalanceOf<Self>>;
 
 	// 对作弊者的惩罚金额
@@ -187,8 +189,10 @@ decl_module! {
 			// 过期删除相关信息  并且退出
 			if now - <Votes<T>>::get(&tx_hash).start_vote_block > T::ProposalExpire::get(){
 					<Votes<T>>::remove(&tx_hash);
-					// 删除相关的man thhashs信息
 					// TODO 添加和删除方法均已经实现， 注意查看代码是否正确
+					// 把举报者的抵押归还
+					T::Currency0::unreserve(&<Votes<T>>::get(&tx_hash).reporter, T::ReportReserve::get());
+					// 删除相关的man thhashs信息
 					Self::remove_mantxhashs(who.clone(), tx_hash.clone());
 					Self::remove_mantxhashs(illegalman.clone(), tx_hash.clone());
 					ensure!(1==2, "the vote is expire.")
