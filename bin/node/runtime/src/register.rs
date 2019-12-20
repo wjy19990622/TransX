@@ -1,5 +1,5 @@
 
-type BalanceOf<T> = <<T as Trait>::Currency as Currency<<T as system::Trait>::AccountId>>::Balance;
+type BalanceOf<T> = <<T as Trait>::Currency1 as Currency<<T as system::Trait>::AccountId>>::Balance;
 use support::traits::{Get,
 	Currency, ReservableCurrency
 };
@@ -8,6 +8,7 @@ use support::{debug, ensure, decl_module, decl_storage, decl_event, dispatch::Re
 use system::ensure_signed;
 use timestamp;
 use codec::{Encode, Decode};
+use crate::report;
 
 #[derive(Encode, Decode, Default, Clone, PartialEq)]
 #[cfg_attr(feature = "std", derive(Debug))]
@@ -26,7 +27,7 @@ pub trait Trait: timestamp::Trait + system::Trait {
 	/// The overarching event type.
 	type PledgeAmount: Get<BalanceOf<Self>>;
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
-	type Currency: Currency<Self::AccountId> + ReservableCurrency<Self::AccountId>;
+	type Currency1: Currency<Self::AccountId> + ReservableCurrency<Self::AccountId>;
 }
 
 
@@ -37,6 +38,9 @@ decl_storage! {
 		TokenInfo: double_map hasher(twox_64_concat) T::AccountId, blake2_256(Vec<u8>) => Vec<u8>;
 		AllRegisters get(fn allregisters):  map Vec<u8> => T::AccountId;
 		MinersCount: u64;
+
+		// 黑名单  只有举报模块调用
+		pub BlackList get(fn blacklist): map T::AccountId => T::Hash;
 	}
 }
 
@@ -58,6 +62,8 @@ decl_module! {
 
 			ensure!(!<AllMiners<T>>::exists(who.clone()), "you have been registed!");
 			// 账户已经存在不需要注册！
+			// 如果账户已经进入黑名单， 则不能再注册
+			ensure!(!<BlackList<T>>::exists(who.clone()), "you are the member of the blacklist, can't register again.");
 
 			ensure!(!<AllRegisters<T>>::exists(hardware_id.clone()), "the hardware_id is exists!");
 			// 硬件已经被注册则不能再次注册。
@@ -65,7 +71,7 @@ decl_module! {
 			let bond :BalanceOf<T> = T::PledgeAmount::get();
 			debug::RuntimeLogger::init();
 			debug::print!("bond---------------------------------{:?}", bond);
-			T::Currency::reserve(&who, bond.clone())
+			T::Currency1::reserve(&who, bond.clone())
 				.map_err(|_| "Proposer's balance too low, you can't registe!")?;
 			// 抵押不够不给注册
 
@@ -120,7 +126,7 @@ decl_module! {
 			// 如果还没有注册， 则直接退出
 
 			let bond :BalanceOf<T> = T::PledgeAmount::get();
-			T::Currency::unreserve(&who, bond.clone());
+			T::Currency1::unreserve(&who, bond.clone());
 			// 归还抵押
 
 			let hardware_id = <AllMiners<T>>::get(who.clone()).hardware_id;
@@ -201,6 +207,38 @@ decl_event!(
 		KillRegisterEvent(AccountId),
 	}
 );
+impl <T: Trait> Module <T> {
+	pub fn kill_man(who: T::AccountId) -> Result{
+		ensure!(<AllMiners<T>>::exists(who.clone()), "you have been not registered!");
+			// 如果还没有注册， 则直接退出
+
+			let bond :BalanceOf<T> = T::PledgeAmount::get();
+			T::Currency1::unreserve(&who, bond.clone());
+			// 归还抵押
+
+			let hardware_id = <AllMiners<T>>::get(who.clone()).hardware_id;
+			// 获取硬件id
+
+			<AllMiners<T>>::remove(who.clone());
+			// 从矿机列表删除该账户
+
+			<AllRegisters<T>>::remove(hardware_id.clone());
+			// 从AllRegisters列表中删除记录
+
+			let minercount = MinersCount::get();
+			let new_minercount = minercount - 1;
+			MinersCount::put(new_minercount);
+			// 矿机数减掉1
+
+			<TokenInfo<T>>::remove_prefix(who.clone());
+			//删除掉相关的tokeninfo
+
+			Self::deposit_event(RawEvent::KillRegisterEvent(who.clone()));
+
+			Ok(())
+	}
+
+}
 
 // tests for this module
 //#[cfg(test)]

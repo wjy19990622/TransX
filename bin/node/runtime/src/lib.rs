@@ -60,6 +60,7 @@ pub use staking::StakerStatus;
 /// Implementations of some helper traits passed into runtime modules as associated types.
 pub mod impls;
 pub mod register;
+pub mod report;
 
 mod mine;
 mod mine_linked;
@@ -389,8 +390,32 @@ impl treasury::Trait for Runtime {
 impl register::Trait for Runtime {
 	type PledgeAmount = PledgeAmount;
 	type Event = Event;
-	type Currency = Balances;
+	type Currency1 = Balances;
 }
+
+parameter_types!{
+	pub const ProposalExpire: BlockNumber = 7*DAYS;
+	pub const VoteRewardPeriod: BlockNumber = 1 * DAYS;
+	pub const ReportReserve: Balance = 10*DOLLARS;
+	pub const ReportReward: Balance = 250*DOLLARS;
+	pub const IllegalPunishment: Balance = 500*DOLLARS;
+	pub const CouncilReward: Balance = 10*DOLLARS;
+	pub const Threshould: u32 = 7;
+}
+
+impl report::Trait for Runtime {
+	type Thredshould = Threshould;
+	type ConcilOrigin = collective::EnsureMember<AccountId, CouncilCollective>;
+	type Currency0 = Balances;
+	type ProposalExpire = ProposalExpire;
+	type VoteRewardPeriod = VoteRewardPeriod;
+	type ReportReserve = ReportReserve;
+	type IllegalPunishment = IllegalPunishment;
+	type CouncilReward = CouncilReward;
+	type ReportReward = ReportReward;
+	type Event = Event;
+}
+
 
 parameter_types! {
 	pub const ContractTransferFee: Balance = 1 * CENTS;
@@ -696,6 +721,7 @@ construct_runtime!(
 		Transx: transx::{Module, Call, Storage, Event<T>},
 		Register: register::{Module, Call, Storage, Event<T>},
 		Mine: mine::{Module, Storage, Call, Event<T>},
+		Report: report::{Module, Call, Storage, Event<T>},
 		//Workforce: workforce::{Module, Call, Storage, Event<T>},
 	}
 );

@@ -68,7 +68,7 @@ decl_module! {
         	// "memo":"hello,octa"}  reserved_balance
         	let sender = ensure_signed(origin)?;
         	ensure!(<AllMiners<T>>::exists(sender.clone()), "account not register");
-        	ensure!(T::Currency::reserved_balance(&sender)>=T::PledgeAmount::get(),"your reservable currency is not enough");
+        	ensure!(T::Currency1::reserved_balance(&sender)>=T::PledgeAmount::get(),"your reservable currency is not enough");
         	ensure!(!<OwnerMineRecord<T>>::exists(tx.clone()), "tx already exists");
         	ensure!(address != to_address,"you cannot transfer  to yourself");
         	ensure!(usdt_nums<u32::max_value(),"usdt_nums is overflow");
