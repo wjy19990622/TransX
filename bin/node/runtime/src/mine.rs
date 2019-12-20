@@ -7,7 +7,7 @@ use sp_runtime::traits::{Hash,SimpleArithmetic, Bounded, One, Member,CheckedAdd}
 use codec::{Encode, Decode};
 use crate::mine_linked::{PersonMineWorkForce,PersonMine,MineParm,PersonMineRecord,BLOCK_NUMS};
 //use node_primitives::BlockNumber;
-use crate::register::{AllMiners,Trait as RegisterTrait};
+use crate::register::{AllMiners, MinersCount, Trait as RegisterTrait};
 use crate::mine_power::{PowerInfo, MinerPowerInfo, TokenPowerInfo, PowerInfoStore, MinerPowerInfoStore, TokenPowerInfoStore};
 use rstd::{result};
 use sp_runtime::traits::{Zero};
@@ -166,6 +166,18 @@ impl<T: Trait> Module<T> {
 		Ok(())
 	}
 
+    // 获取存储矿工算力信息的指示
+    fn miner_power_info_point() -> (u32, u32) {
+        let prev_point = <MinerPowerInfoPrevPoint>::get();
+        let curr_point = match prev_point {
+            1 => 2,
+            2 => 1,
+            _ => 0,
+        };
+        (prev_point, curr_point)
+    }
+
+
 	// 将当日挖矿信息进行归档，不可更改地存储在网络中。
 	fn archive(block_number: T::BlockNumber) {
 		// 对算力信息和Token算力信息进行归档
@@ -176,13 +188,7 @@ impl<T: Trait> Module<T> {
 		Self::deposit_event(RawEvent::TokenPowerInfoArchived(block_number.clone()));
 
 		// 对矿工的挖矿信息进行归档
-		let prev_point = <MinerPowerInfoPrevPoint>::get();
-		let curr_point = match prev_point {
-			1 => 2,
-			2 => 1,
-			_ => 0,
-		};
-
+		let (prev_point, curr_point) = Self::miner_power_info_point();
 		if curr_point == 0 {
 			// 当日和昨日的矿工算力信息均不存在，无需归档
 			return;
@@ -195,10 +201,58 @@ impl<T: Trait> Module<T> {
 
 	}
 
-	// 计算矿工一次挖矿的算力
-	fn calculate_workforce(miner_id: T::AccountId, coin_name: &str, coin_number: f64, coin_price: f64)
+	// 计算矿工一次挖矿的算力，coin_amount指本次交易以USDT计价的金额
+	fn calculate_workforce(miner_id: &T::AccountId, block_number: T::BlockNumber, coin_name: &str, coin_number: f64, coin_price: f64)
 		-> result::Result<u64, &'static str> {
-		Ok(0u64)
+        let (prev_point, curr_point) = Self::miner_power_info_point();
+        let miner_power_info = <MinerPowerInfoStoreItem<T>>::get_miner_power_info(curr_point, miner_id, block_number.clone());
+        let prev_miner_power_info = <MinerPowerInfoStoreItem<T>>::get_miner_power_info(prev_point, miner_id, block_number.clone());
+        let prev_power_info = <PowerInfoStoreItem<T>>::get_prev_power(block_number.clone());
+        let prev_token_power_info = <TokenPowerInfoStoreItem<T>>::get_prev_token_power(block_number.clone());
+        let miner_numbers = <MinersCount>::get();
+
+        let alpha = 0.3;
+        let beta = 1.0 - alpha;
+        let sr = 0.5;
+        match coin_name {
+            "btc" => {
+                let lc_btc = 100u64;
+                ensure!(miner_power_info.btc_count <= lc_btc, "BTC mining count runs out today");
+
+                // 计算矿机P一次BTC转账的频次算力PCW btc = α * 1 / TC / PPC btc ( PC btc < LC btc )
+                // 矿机P计算BTC频次算力钝化系数，PPC btc = ( (PC btc + 1 ) / AvC btc ) % 10
+                let avc_btc = prev_token_power_info.btc_total_count.checked_div(miner_numbers).ok_or("Calc AvC btc causes overflow")?;
+                let ppc_btc_divisor = prev_miner_power_info.btc_count.checked_add(1).ok_or("Calc PPC btc divisor causes overflow")?;
+                let divisor = ppc_btc_divisor.checked_div(avc_btc).ok_or("Calc PPC btc parameter causes overflow")?;
+                let ppc_btc = divisor % 10;
+
+                let mut tc = prev_power_info.total_count;
+                if tc == 0 {
+                    tc = 100;
+                }
+                let pcw_btc:f64 = alpha * ppc_btc as f64 / tc as f64;
+
+                let mut pa = prev_miner_power_info.total_amount;
+                if pa < 10 {
+                    pa = 1000;
+                }
+
+                let coin_amount = (coin_price * coin_number) as u64;
+                // PPA btc	矿机P计算BTC金额算力钝化系数	PPA btc = ( (Price(BTC) * m btc +PAbtc ) / AvA btc ) % 10
+                let ava_btc = prev_token_power_info.btc_total_amount.checked_div(miner_numbers).ok_or("Calc AvA btc causes overflow")?;
+                let ppa_btc_divisor = coin_amount + prev_token_power_info.btc_total_amount;
+                let divisor = ppa_btc_divisor.checked_div(avc_btc).ok_or("Calc PPC btc parameter causes overflow")?;
+                let ppa_btc = divisor % 10;
+                let paw_btc = beta * coin_number * coin_price * ppa_btc as f64 / pa as f64;
+                let pw_btc:f64 = (pcw_btc + paw_btc) * sr;
+
+                return Ok(pw_btc as u64);
+            }
+
+            _ => return Err("Unsupported token")
+        }
+
+		Ok(10u64)
 	}
 }
 

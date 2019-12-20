@@ -36,7 +36,7 @@ decl_storage! {
 		pub AllMiners get(fn allminers): map T::AccountId => MinerInfo<T::AccountId, T::Moment>;
 		TokenInfo: double_map hasher(twox_64_concat) T::AccountId, blake2_256(Vec<u8>) => Vec<u8>;
 		AllRegisters get(fn allregisters):  map Vec<u8> => T::AccountId;
-		MinersCount: u64;
+		pub MinersCount: u64;
 	}
 }
 

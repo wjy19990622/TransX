@@ -17,7 +17,7 @@ use crate::constants::time::DAYS;
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct PowerInfo<BlockNumber> {
     total_power: u64,                       // 24小时总算力
-    total_count: u64,                           // 24小时总交易次数
+    pub(crate) total_count: u64,                           // 24小时总交易次数
     total_amount: u64,                          // 24小时总金额（以USDT计）
     block_number: BlockNumber,                  // 区块高度
 }
@@ -97,8 +97,8 @@ impl<Storage, BlockNumber>PowerInfoStore<Storage, BlockNumber> where
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct TokenPowerInfo<BlockNumber> {
     btc_total_power: u64,         // 24小时BTC累计算力
-    btc_total_count: u64,             // 24小时BTC累计交易次数
-    btc_total_amount: u64,            // 24小时BTC累计交易金额，以USDT计算
+    pub(crate) btc_total_count: u64,             // 24小时BTC累计交易次数
+    pub(crate) btc_total_amount: u64,            // 24小时BTC累计交易金额，以USDT计算
 
     eth_total_power: u64,         // 24小时ETH累计算力
     eth_total_count: u64,             // 24小时ETH累计交易次数
@@ -224,22 +224,22 @@ pub struct MinerPowerInfo<AccountId, BlockNumber> {
     miner_id: AccountId,                        // 矿工ID
     total_power: u64,                           // 24小时累计算力
     total_count: u64,                           // 24小时累计交易次数
-    total_amount: u64,                          // 24小时累计交易金额，以USDT计算
+    pub(crate) total_amount: u64,                          // 24小时累计交易金额，以USDT计算
 
     btc_power: u64,                             // 24小时BTC累计算力
-    btc_count: u64,                             // 24小时BTC累计次数
+    pub(crate) btc_count: u64,                             // 24小时BTC累计次数
     btc_amount: u64,                            // 24小时BTC累计金额，以USDT计算
 
     eth_power: u64,                             // 24小时ETH累计算力
-    eth_count: u64,                             // 24小时ETH累计次数
+    pub(crate) eth_count: u64,                             // 24小时ETH累计次数
     eth_amount: u64,                            // 24小时ETH累计金额，以USDT计算
 
     eos_power: u64,                             // 24小时EOS累计算力
-    eos_count: u64,                             // 24小时EOS累计次数
+    pub(crate) eos_count: u64,                             // 24小时EOS累计次数
     eos_amount: u64,                            // 24小时EOS累计金额，以USDT计算
 
     usdt_power: u64,                            // 24小时USDT累计算力
-    usdt_count: u64,                            // 24小时USDT累计次数
+    pub(crate) usdt_count: u64,                            // 24小时USDT累计次数
     usdt_amount: u64,                           // 24小时USDT累计金额，以USDT计算
 
     block_number: BlockNumber,                  // 区块高度
@@ -269,6 +269,11 @@ impl<Storage, AccountId, BlockNumber>MinerPowerInfoStore<Storage, AccountId, Blo
 
     fn write(number: u32, miner_id: &AccountId, miner_power_info: &MinerPowerInfo<AccountId, BlockNumber>) {
         Storage::insert(&number, &(miner_id.clone()),miner_power_info);
+    }
+
+    // 获取指定编号的矿工算力信息
+    pub(crate) fn get_miner_power_info(number: u32, miner_id: &AccountId, block_number: BlockNumber) -> MinerPowerInfo<AccountId, BlockNumber> {
+        Self::read(number, miner_id, block_number)
     }
 
     // 增加矿工当日算力，curr_point指MinerPowerInfoDict中指向当日算力的key，为MinerPowerInfoPrevPoint的对立值。
@@ -325,60 +330,4 @@ impl<Storage, AccountId, BlockNumber>MinerPowerInfoStore<Storage, AccountId, Blo
     }
 }
 
-
-//impl<T: Trait> Module<T> {
-//    // 计算一次挖矿的算力
-//    fn calc_power(hardware_id: Vec<u8>, coin_name: &str, coin_number: f64, coin_price: f64) -> Result {
-//        let mut power_info = Self::get_power_info_or_insert();
-//        let mut miner_info = Self::get_miner_info_by_id(hardware_id.clone());
-//
-//        let prev_power_info = Self::get_prev_power_info_or_default();
-//        let prev_miner_info = Self::get_prev_miner_info_by_id(hardware_id.clone());
-//        let prev_token_trade_info = Self::get_prev_token_trade_info_or_default();
-//
-//        if coin_name == "BTC" {
-//            let lc_btc: u64 = 100;
-//            ensure!(miner_info.btc_count <= lc_btc, "BTC mining count runs out today");
-//
-//            // 计算矿机P一次BTC转账的频次算力PCW btc = α * 1 / TC / PPC btc ( PC btc < LC btc )
-//            // 矿机P计算BTC频次算力钝化系数，PPC btc = ( (PC btc + 1 ) / AvC btc ) % 10
-//            let avc_btc = prev_token_trade_info.btc_total_count.checked_div(power_info.miner_numbers)
-//                .ok_or("Calc AvC btc causes overflow")?;
-//            let ppc_btc_divisor = prev_miner_info.btc_count.checked_add(1)
-//                .ok_or("Calc PPC btc divisor causes overflow")?;
-//            let divisor = ppc_btc_divisor.checked_div(avc_btc).ok_or("Calc PPC btc parameter causes overflow")?;
-//            let ppc_btc = divisor % 10;
-//
-//            let alpha:f64 = 0.3;
-//            let mut tc = prev_power_info.total_count;
-//            if tc == 0 {
-//                tc = 100;
-//            }
-//
-//            let pcw_btc = alpha * ppc_btc / tc;
-//
-//            let beta = 1 - alpha;
-//            let mut pa = prev_miner_info.total_amount;
-//            if pa < 10 {
-//                pa = 1000;
-//            }
-//
-//            // PPA btc	矿机P计算BTC金额算力钝化系数	PPA btc = ( (Price(BTC) * m btc +PAbtc ) / AvA btc ) % 10
-//            let ava_btc = prev_token_trade_info.btc_total_amount.checked_div(power_info.miner_numbers)
-//                .ok_or("Calc AvA btc causes overflow")?;
-//            let ppa_btc_divisor = coin_price * coin_number + prev_token_trade_info.btc_total_amount;
-//            let divisor = ppa_btc_divisor.checked_div(avc_btc).ok_or("Calc PPC btc parameter causes overflow")?;
-//            let ppa_btc = divisor % 10;
-//            let paw_btc = beta * coin_number * coin_price * ppa_btc / pa;
-//
-//            let sr = 0.5;
-//
-//            let pw_btc = (pcw_btc + paw_btc) * sr;
-//
-//            Ok(pw_btc)
-//        }
-//
-//        Ok(())
-//    }
-//}
 
