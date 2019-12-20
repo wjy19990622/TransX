@@ -64,6 +64,8 @@ pub mod register;
 mod mine;
 mod mine_linked;
 
+mod offchain_pricefetch;
+
 use impls::{CurrencyToVoteHandler, Author, LinearWeightToFee, TargetedFeeAdjustment};
 
 /// Constant values used within the runtime.
@@ -639,14 +641,18 @@ impl transx::Trait for Runtime {
 	type FoundingTeamProportion = FoundingTeamProportion;
 }
 
-parameter_types! {
-	pub const TranRuntime: Runtime = Runtime;
-}
+//parameter_types! {
+//	pub const TranRuntime: Runtime = Runtime;
+//}
 
 impl mine::Trait for Runtime {
 	type Event = Event;
 	type MineIndex = u64;
 	//type TranRuntime = Runtime;
+}
+
+parameter_types! {
+	pub const FOUR_HOUR:BlockNumber = 4 * HOURS; // 每天有6个4小时
 }
 
 // Add `workforce` module

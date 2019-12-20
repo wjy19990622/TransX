@@ -9,6 +9,7 @@ const DAY_SECONDS :u32 = 86400;
 const BLOCK_TIME:u32 = 3;   //  3s出一个块
 pub const BLOCK_NUMS: u32 = DAY_SECONDS/BLOCK_TIME;
 
+
 #[cfg_attr(feature = "std", derive(Debug, PartialEq, Eq))]
 #[derive(Encode, Decode)]
 pub struct MineParm {

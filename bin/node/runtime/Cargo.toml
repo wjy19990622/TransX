@@ -5,6 +5,11 @@ authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2018"
 build = "build.rs"
 
+[dependencies.simple-json]
+default_features = false
+git = 'https://github.com/jimmychu0807/simple-json'
+version = '0.1.1'
+
 [dependencies]
 # third-party dependencies
 codec = { package = "parity-scale-codec", version = "1.0.6", default-features = false, features = ["derive"] }
@@ -12,6 +17,7 @@ integer-sqrt = { version = "0.1.2" }
 safe-mix = { version = "1.0", default-features = false }
 rustc-hex = { version = "2.0", optional = true }
 serde = { version = "1.0.102", optional = true }
+serde_json = "1.0.41"
 
 # primitives
 authority-discovery-primitives = { package = "sp-authority-discovery", path = "../../../primitives/authority-discovery", default-features = false }
@@ -29,6 +35,7 @@ sp-keyring = { path = "../../../primitives/keyring", optional = true }
 sp-sesssion = { path = "../../../primitives/session", default-features = false }
 txpool-runtime-api = { package = "sp-transaction-pool-runtime-api", path = "../../../primitives/transaction-pool/runtime-api", default-features = false }
 version = { package = "sp-version", path = "../../../primitives/sr-version", default-features = false }
+app-crypto = { package = "sc-application-crypto", path = "../../../primitives/application-crypto", default-features = false }
 
 # frame dependencies
 authority-discovery = { package = "pallet-authority-discovery", path = "../../../frame/authority-discovery", default-features = false }
@@ -101,6 +108,7 @@ std = [
 	"rustc-hex",
 	"safe-mix/std",
 	"serde",
+	"serde_json",
 	"session/std",
 	"sp-api/std",
 	"sp-runtime/std",
@@ -119,4 +127,5 @@ std = [
 	"txpool-runtime-api/std",
 	"utility/std",
 	"version/std",
+	'simple-json/std',
 ]

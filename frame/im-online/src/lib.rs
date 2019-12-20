@@ -238,8 +238,8 @@ decl_storage! {
 			blake2_256(T::ValidatorId) => u32;
 	}
 	add_extra_genesis {
-		config(keys): Vec<T::AuthorityId>;
-		build(|config| Module::<T>::initialize_keys(&config.keys))
+		config(keys): Vec<T::AuthorityId>; // 本身这里keys跟上面的没关系,通过下面initialize_keys来进行初始化写入上面的keys
+		build(|config| Module::<T>::initialize_keys(&config.keys)) // 通过调用该函数来初始化 keys 设置为空
 	}
 }
 
@@ -254,8 +254,8 @@ decl_module! {
 			// since signature verification is done in `validate_unsigned`
 			// we can skip doing it here again.
 			_signature: <T::AuthorityId as RuntimeAppPublic>::Signature
-		) {
-			ensure_none(origin)?;
+		) {   // 链上接收到的心跳数据
+			ensure_none(origin)?;   // 因为这笔交易没有签名
 
 			let current_session = <session::Module<T>>::current_index();
 			let exists = <ReceivedHeartbeats>::exists(
@@ -268,7 +268,7 @@ decl_module! {
 				Self::deposit_event(Event::<T>::HeartbeatReceived(public.clone()));
 
 				let network_state = heartbeat.network_state.encode();
-				<ReceivedHeartbeats>::insert(
+				<ReceivedHeartbeats>::insert( // 心跳数据存在链上
 					&current_session,
 					&heartbeat.authority_index,
 					&network_state
@@ -285,7 +285,7 @@ decl_module! {
 			debug::RuntimeLogger::init();
 
 			// Only send messages if we are a potential validator.
-			if runtime_io::offchain::is_validator() {
+			if runtime_io::offchain::is_validator() { // 是否是验证人的模式启动
 				Self::offchain(now);
 			}
 		}
@@ -410,15 +410,15 @@ impl<T: Trait> Module<T> {
 
 			let network_state = runtime_io::offchain::network_state()
 				.map_err(|_| OffchainErr::NetworkState)?;
-			let heartbeat_data = Heartbeat {
+			let heartbeat_data = Heartbeat { // 发送的心跳数据
 				block_number,
 				network_state,
-				session_index: <session::Module<T>>::current_index(),
+				session_index: <sesheartbeatsion::Module<T>>::current_index(),
 				authority_index,
 			};
 
 			let signature = key.sign(&heartbeat_data.encode()).ok_or(OffchainErr::FailedSigning)?;
-			let call = Call::heartbeat(heartbeat_data, signature);
+			let call = Call::heartbeat(heartbeat_data, signature); // 打包部分
 
 			debug::info!(
 				target: "imonline",
@@ -428,7 +428,7 @@ impl<T: Trait> Module<T> {
 			);
 
 			results.push(
-				T::SubmitTransaction::submit_unsigned(call)
+				T::SubmitTransaction::submit_unsigned(call) // 打包提交,打包提交前可以进行验证 ValidateUnsigned
 					.map_err(|_| OffchainErr::SubmitTransaction)
 			);
 		}
@@ -482,7 +482,7 @@ impl<T: Trait> Module<T> {
 		let last_gossip = runtime_io::offchain::local_storage_get(StorageKind::PERSISTENT, DB_KEY);
 		match last_gossip {
 			Some(last) => {
-				let worker_status: WorkerStatus<T::BlockNumber> = Decode::decode(&mut &last[..])
+				let worker_status: WorkerStatus<T::BlockNumber> = Decode::decode(&mut &last[..]) // Vec<u8>转化为WorkerStatus
 					.map_err(|_| OffchainErr::DecodeWorkerStatus)?;
 
 				let was_aborted = !worker_status.done && worker_status.gossipping_at < now;
@@ -502,9 +502,9 @@ impl<T: Trait> Module<T> {
 	}
 
 	fn initialize_keys(keys: &[T::AuthorityId]) {
-		if !keys.is_empty() {
-			assert!(Keys::<T>::get().is_empty(), "Keys are already initialized!");
-			Keys::<T>::put(keys);
+		if !keys.is_empty() { // keys不为空,写进去Keys
+			assert!(Keys::<T>::get().is_empty(), "Keys are already initialized!"); // Keys里面本身有数据了,结束
+			Keys::<T>::put(keys); // Keys里面本身页没数据才写入
 		}
 	}
 }
@@ -538,11 +538,12 @@ impl<T: Trait> session::OneSessionHandler<T::AccountId> for Module<T> {
 	}
 
 	fn on_before_session_ending() {
+		// session结束的时候,检测是否收到心跳
 		let session_index = <session::Module<T>>::current_index();
 		let keys = Keys::<T>::get();
 		let current_validators = <session::Module<T>>::validators();
 
-		let offenders = current_validators.into_iter().enumerate()
+		let offenders = current_validators.into_iter().enumerate() // 没收到心跳的 validators 的集合
 			.filter(|(index, id)|
 				!Self::is_online_aux(*index as u32, id)
 			).filter_map(|(_, id)|
@@ -562,7 +563,7 @@ impl<T: Trait> session::OneSessionHandler<T::AccountId> for Module<T> {
 
 			let validator_set_count = keys.len() as u32;
 			let offence = UnresponsivenessOffence { session_index, validator_set_count, offenders };
-			T::ReportUnresponsiveness::report_offence(vec![], offence);
+			T::ReportUnresponsiveness::report_offence(vec![], offence); // 上报 没有心跳validators集合
 		}
 	}
 

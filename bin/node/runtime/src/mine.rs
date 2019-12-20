@@ -58,7 +58,7 @@ decl_module! {
         fn deposit_event() = default;
 
         pub fn create_mine(origin,tx:Vec<u8>,address:Vec<u8>,to_address:Vec<u8>,symbol:Vec<u8>,amount:u64,protocol:Vec<u8>,decimal:u64,usdt_nums:u32,blockchain:Vec<u8>,memo:Vec<u8>) -> Result { // 创建挖矿
-        	// 传入参数:
+        	// 传入参数: todo: 还是 amount/10.pow(decimal)
         	// {"action":"transfer","contract":"",  // 传入一定是 transfer
         	//  "tx":"eth_xxxxxxxx",      // 币名字 + "_" + "tx hash"  的 字节码.名字为小写
         	// "address":"0x86d1DA963b381Ad4278CaD0C27e95D80777399EB",
