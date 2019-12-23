@@ -7,7 +7,7 @@ use sp_runtime::traits::{Hash,SimpleArithmetic, Bounded, One, Member,CheckedAdd}
 use codec::{Encode, Decode};
 use crate::mine_linked::{PersonMineWorkForce,PersonMine,MineParm,PersonMineRecord,BLOCK_NUMS};
 //use node_primitives::BlockNumber;
-use crate::register::{AllMiners,Trait as RegisterTrait};
+use crate::register::{self,AllMiners,Trait as RegisterTrait};
 
 
 // 继承 register 模块,方便调用register里面的 store
@@ -96,6 +96,8 @@ decl_module! {
 impl<T: Trait> Module<T> {
 	fn mining(mine_parm:MineParm,sender: T::AccountId)->Result{
 		ensure!(<AllMiners<T>>::exists(sender.clone()), "account not register");
+//		<register::Module<T>>::add_token_info([1,2,3].to_vec(),[1,2,3].to_vec());
+//		register::Call::<T>::add_token_info([1,2,3].to_vec(),[1,2,3].to_vec());
 		let block_num = <system::Module<T>>::block_number(); // 获取区块的高度
 		let day_block_nums = <BlockNumberOf<T>>::from(BLOCK_NUMS);
 		// let now_day = block_num.checked_div(&day_block_nums).ok_or("mining function: div causes error")?;

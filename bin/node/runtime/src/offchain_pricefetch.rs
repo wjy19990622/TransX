@@ -32,6 +32,7 @@ use primitives::{
 //	crypto::KeyTypeId,
     offchain,
 };
+use num_traits::real::Real;
 
 
 #[derive(Debug, Encode, Decode, Clone, PartialEq, Eq,Serialize, Deserialize)]
@@ -43,10 +44,23 @@ pub struct Price<AccountId> {  // 存储币种价格
 }
 
 #[derive(Debug, Encode, Decode, Clone, PartialEq, Eq,Serialize, Deserialize)]
-pub struct SymbolFetch {  // 存储币种价格
-   data
+struct Data{
+    id:String,
+    symbol:String,
+    #[serde(rename="priceUsd")]
+    price_usd:String,
+    #[serde(rename="vwap24Hr")]
+    vwap24hr:String,
+    #[serde(rename="changePercent24Hr")]
+    change_percent24hr:String,
+
 }
 
+#[derive(Debug, Encode, Decode, Clone, PartialEq, Eq,Serialize, Deserialize)]
+pub struct SymbolFetch {  // 存储币种价格
+    data:Data,
+    timestamp:u64,
+}
 
 
 #[derive(Debug, Encode, Decode, Clone, PartialEq)]
@@ -87,7 +101,7 @@ pub const FETCHED_CRYPTOS: [(&'static [u8], &'static [u8], &'static [u8]); 2] = 
 pub type StdResult<T> = core::result::Result<T, &'static str>;
 
 /// The module's configuration trait.
-pub trait Trait: timestamp::Trait + system::Trait {
+pub trait Trait: timestamp::Trait + system::Trait+ authority_discovery::Trait{
     /// The overarching event type.
     type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 
@@ -139,7 +153,7 @@ decl_storage! {
     // 记录 哪个节点ccountId,时间,哪个 url 没有查询到数据.保存一天数据.key: 币名字, value:时间 , url
     pub SrcPriceFailed get(src_price_failed) map vec<u8> => Vec<(PriceFailedOf<T>)>
 
-    Authorities get(authorities) config(): Vec<T::AccountId>;
+    ValidatorList get(get_validators) config(): Vec<T::AccountId>;
   }
 }
 
@@ -295,7 +309,7 @@ impl<T: Trait> Module<T> {
                     errinfo: err_msg.as_bytes().to_vec(),
                 };
                 // 上报 todo: 实现签名
-                let call = Call::record_fail_fetchprice((sym, remote_src, remote_url), price);
+                let call = Call::record_fail_fetchprice((sym, remote_src, remote_url), price_failed);
                 T::SubmitUnsignedTransaction::submit_unsigned(call)
                     .map_err(|_| "fetch_price: submit_unsigned_call error")
             };
@@ -307,16 +321,23 @@ impl<T: Trait> Module<T> {
         }
     }
 
-        fn is_authority(who: &T::AccountId) -> bool {
-            // Vec<T::AccountId> 遍历出来,与who 对比,如果 AccountId==who,然后判断该值:如果此对象包含数据，则为真。
-            Self::authorities().into_iter().find(|i| i == who).is_some()
-        }
+    fn is_authority(who: &T::AccountId) -> bool {
+        // Vec<T::AccountId> 遍历出来,与who 对比,如果 AccountId==who,然后判断该值:如果此对象包含数据，则为真。
+        let authorities = <authority_discovery::Module<T>>::authorities().iter().map(
+            |i| (*i).clone().into()
+        ).collect::<Vec<T::AccountId>>();
+        Self::ValidatorList().into_iter().find(|i| i == who).is_some() ||
+            authorities.into_iter().find(i| i == who).is_some() // todo 待验证
+    }
+
 
     /// Find a local `AccountId` we can sign with, that is allowed to offchainwork
     fn authority_id() -> Option<T::AccountId> {
         //通过本地化的密钥类型查找此应用程序可访问的所有本地密钥。
-        // 然后遍历当前存储在chain上的所有authorities，并根据本地键列表检查它们，直到找到一个匹配，否则返回None。
-
+        // 然后遍历当前存储在chain上的所有ValidatorList，并根据本地键列表检查它们，直到找到一个匹配，否则返回None。
+        let authorities = <authority_discovery::Module<T>>::authorities().iter().map(
+            |i| (*i).clone().into()
+        ).collect::<Vec<T::AccountId>>();
         let local_keys = T::AuthorityId::all().iter().map(
             |i| (*i).clone().into()
         ).collect::<Vec<T::AccountId>>();
@@ -396,7 +417,7 @@ impl<T: Trait> Module<T> {
         runtime_io::print_utf8(b"--fetch_json over--");
 
         let price = match remote_src.as_slice() { // 解析json
-            src if src == b"coincap" => Self::fetch_price_from_coincap(remote_url,&fetch_res)
+            src if src == b"coincap" => Self::fetch_price_from_coincap(sym,remote_src,&fetch_res)
                 .map_err(|_| "fetch_price_from_coincap error")?,
             _ => return Err("Unknown remote source"),
         };
@@ -407,9 +428,21 @@ impl<T: Trait> Module<T> {
             .map_err(|_| "fetch_price: submit_unsigned_call error")
     }
 
-    fn fetch_price_from_coincap(remote_url:Vec<u8>,fetch: &[u8]) -> StdResult<Price<T::AccountId>> {
+    fn fetch_price_from_coincap(sym: Vec<u8>,remote_src:Vec<u8>,fetch: &[u8]) -> StdResult<Price<T::AccountId>> {
         runtime_io::print_utf8(b"-- fetch_price_from_coincap");
-        let p: Price<T::AccountId> = serde_json::from_slice(fetch).map_err(|_|"utf-8 to price struct failed")?;
+        let symbol_fetch: SymbolFetch = serde_json::from_slice(fetch).map_err(|_|"utf-8 to price struct failed")?;
+        let symbol_info = symbol_fetch.data;
+        let price_usd = symbol_info.price_usd;
+        let mut v:Vec<u64> = vec![];
+        for i in price.split("."){
+            v.push(i.parse::<u64>().unwrap());
+        }
+        let p = Price{
+            dollars:v.0,
+            cents:v.1,
+            account:T::AccountId,
+            url:remote_src
+        };
         Ok(p)
     }
 
@@ -417,14 +450,14 @@ impl<T: Trait> Module<T> {
         let mut pp_map = BTreeMap::new();
 
         // TODO: calculate the map of sym -> pp
-        pp_map.insert(b"BTC".to_vec(), Price::new(100, 3500, None));
-
-        pp_map.iter().for_each(|(sym, price)| {
-            let call = Call::record_agg_pp(sym.clone(), price.clone());
-            if let Err(_) = T::SubmitUnsignedTransaction::submit_unsigned(call) { // 提交没有签名
-                print("aggregate_pp: submit_unsigned_call error");
-            }
-        });
+//        pp_map.insert(b"BTC".to_vec(), Price::new(100, 3500, None));
+//
+//        pp_map.iter().for_each(|(sym, price)| {
+//            let call = Call::record_agg_pp(sym.clone(), price.clone());
+//            if let Err(_) = T::SubmitUnsignedTransaction::submit_unsigned(call) { // 提交没有签名
+//                print("aggregate_pp: submit_unsigned_call error");
+//            }
+//        });
         Ok(())
     }
 }

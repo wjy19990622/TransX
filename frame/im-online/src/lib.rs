@@ -413,7 +413,7 @@ impl<T: Trait> Module<T> {
 			let heartbeat_data = Heartbeat { // 发送的心跳数据
 				block_number,
 				network_state,
-				session_index: <sesheartbeatsion::Module<T>>::current_index(),
+				session_index: <session::Module<T>>::current_index(),
 				authority_index,
 			};
 
