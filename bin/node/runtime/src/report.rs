@@ -446,11 +446,11 @@ impl<T: Trait> Module<T> {
 		if is_punish == IsPunished::YES {
 			// 惩罚作弊者的金额(注册过的人没有进入黑名单， 那么一定存在）
 			if !<BlackList<T>>::exists(reporter.clone()) {
-				if T::Currency0::total_balance(&reporter) >= T::IllegalPunishment::get(){
+				if T::Currency0::total_balance(&illegalman) >= T::IllegalPunishment::get(){
 					postive = T::IllegalPunishment::get();
 				}
 				else{
-					postive = T::Currency0::total_balance(&reporter);
+					postive = T::Currency0::total_balance(&illegalman);
 				}
 
 			}
@@ -520,11 +520,11 @@ impl<T: Trait> Module<T> {
 		if is_punish == IsPunished::YES {
 			// 惩罚作弊者的金额(注册过的人没有进入黑名单， 那么一定存在）
 			if !<BlackList<T>>::exists(reporter.clone()) {
-				if T::Currency0::total_balance(&reporter) >= T::IllegalPunishment::get(){
+				if T::Currency0::total_balance(&illegalman) >= T::IllegalPunishment::get(){
 					T::Currency0::slash_reserved(&illegalman, T::IllegalPunishment::get());
 				}
 				else{
-					T::Currency0::slash_reserved(&illegalman, T::Currency0::total_balance(&reporter));
+					T::Currency0::slash_reserved(&illegalman, T::Currency0::total_balance(&illegalman));
 				}
 
 			}
