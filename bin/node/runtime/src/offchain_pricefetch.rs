@@ -116,7 +116,7 @@ pub trait Trait: timestamp::Trait + system::Trait+ authority_discovery::Trait{
     /// The local AuthorityId
     type AuthorityId: RuntimeAppPublic + From<Self::AccountId> + Into<Self::AccountId> + Clone;
 
-    type twoHour: Get<Self::BlockNumber>;
+    type TwoHour: Get<Self::BlockNumber>;
     type Day: Get<Self::BlockNumber>;
 }
 
@@ -168,7 +168,7 @@ decl_module! {
     // Clean the state on initialization of the block
     fn on_initialize(block: T::BlockNumber) {
         <Self as Store>::OcRequests::kill();
-        if (block % T::twoHour::get()).is_zero() {
+        if (block % T::TwoHour::get()).is_zero() {
             // 删除某个价格列表 double_map
             let _ = Self::enque_pricefetch_tasks();  // 每5个区块执行一次该函数,添加到队列中
             }
@@ -255,7 +255,7 @@ decl_module! {
 
 
        fn on_finalize(n: T::BlockNumber) {
-            if (n % T::twoHour::get()).is_zero() {
+            if (n % T::TwoHour::get()).is_zero() {
                 // 删除某个价格列表 double_map
 
             }

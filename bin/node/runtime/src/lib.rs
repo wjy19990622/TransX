@@ -77,6 +77,18 @@ use constants::{time::*, currency::*};
 /// Transx function used within the runtime.
 pub mod transx;
 
+pub mod offchain_pricefetch_crypto {
+	pub use crate::offchain_pricefetch::KEY_TYPE;
+	use primitives::sr25519;
+	app_crypto::app_crypto!(sr25519, KEY_TYPE);
+
+	impl From<Signature> for super::Signature {
+		fn from(a: Signature) -> Self {
+			sr25519::Signature::from(a).into()
+		}
+	}
+}
+
 // Make the WASM binary available.
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
@@ -656,15 +668,27 @@ impl mine::Trait for Runtime {
 	type ArchiveDuration = ArchiveDuration;
 }
 
-parameter_types! {
-	pub const FOUR_HOUR:BlockNumber = 4 * HOURS; // 每天有6个4小时
-}
+type OffchainPFAccount = offchain_pricefetch_crypto::Public;
+type SubmitPFTransaction = TransactionSubmitter<OffchainPFAccount, Runtime, UncheckedExtrinsic>;
 
-// Add `workforce` module
 parameter_types! {
 	// 将算力汇总信息归档到链上并不再修改
 	pub const ArchiveDuration: BlockNumber = 10 * MINUTES;
 
+}
+
+parameter_types! {
+	pub const TwoHour:BlockNumber = 2 * HOURS; // 每天有6个4小时
+}
+
+impl offchain_pricefetch::Trait for Runtime {
+	type Call = Call;
+	type Event = Event;
+	type SubmitTransaction = SubmitPFTransaction;
+	type SubmitUnsignedTransaction = SubmitPFTransaction;
+	type AuthorityId = OffchainPFAccount;
+	type TwoHour = ();
+	type Day = ();
 }
 
 //pub mod workforce;
