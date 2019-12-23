@@ -63,6 +63,7 @@ pub mod register;
 
 mod mine;
 mod mine_linked;
+mod mine_power;
 
 mod offchain_pricefetch;
 //mod expanded;
@@ -642,14 +643,17 @@ impl transx::Trait for Runtime {
 	type FoundingTeamProportion = FoundingTeamProportion;
 }
 
-//parameter_types! {
-//	pub const TranRuntime: Runtime = Runtime;
-//}
+parameter_types! {
+	pub const TranRuntime: Runtime = Runtime;
+	// 将算力汇总信息归档到链上并不再修改
+	pub const ArchiveDuration: BlockNumber = 1 * DAYS;
+}
 
 impl mine::Trait for Runtime {
 	type Event = Event;
 	type MineIndex = u64;
 	//type TranRuntime = Runtime;
+	type ArchiveDuration = ArchiveDuration;
 }
 
 parameter_types! {
@@ -703,7 +707,6 @@ construct_runtime!(
 		Transx: transx::{Module, Call, Storage, Event<T>},
 		Register: register::{Module, Call, Storage, Event<T>},
 		Mine: mine::{Module, Storage, Call, Event<T>},
-		//Workforce: workforce::{Module, Call, Storage, Event<T>},
 	}
 );
 
