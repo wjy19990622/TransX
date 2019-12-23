@@ -313,7 +313,7 @@ impl<T: Trait> Module<T> {
 				if sub_or_add == TreasuryNeed::ADD{
 					// 给国库增加金额
 					useable_balance += imbalances;
-					T::Currency0::make_free_balance_be(&treasury_id, useable_balance);
+					T::Currency0::make_free_balance_be(&treasury_id, useable_balance + T::Currency0::minimum_balance());
 					// 彻底删掉投票信息
 					<Votes<T>>::remove(voteinfo.clone().tx_hash);
 					Self::everyone_balance_oprate(is_punish.clone(), voteinfo.clone());
@@ -324,7 +324,7 @@ impl<T: Trait> Module<T> {
 					if useable_balance >= imbalances{
 						// 给国库减掉金额
 						useable_balance -= imbalances;
-						T::Currency0::make_free_balance_be(&treasury_id, useable_balance);
+						T::Currency0::make_free_balance_be(&treasury_id, useable_balance + T::Currency0::minimum_balance());
 						// 彻底删掉投票信息
 						<Votes<T>>::remove(voteinfo.clone().tx_hash);
 						Self::everyone_balance_oprate(is_punish.clone(), voteinfo.clone());
