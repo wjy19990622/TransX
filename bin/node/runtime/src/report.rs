@@ -102,10 +102,10 @@ pub trait Trait: balances::Trait + RegisterTrait + elections_phragmen::Trait{
 decl_storage! {
 	trait Store for Module<T: Trait> as ReportModule {
 
-		// 所有还未奖励的投票的集合
+		// 所有还未奖励的投票的集合（一直到投票奖励完成才kill）
 		pub Votes get(fn votes): map T::Hash => VoteInfo<T::BlockNumber, T::AccountId, T::Balance, T::Hash>;
 
-		// 所有人建立一个与自己有关的所有合法交易的tx_hash数组， 这些驻足组成一个集合
+		// 所有人建立一个与自己有关的所有合法交易的tx_hash数组， 这些数组组成一个集合
 		pub Man_Txhashs get(fn mantxhashs): map T::AccountId => Vec<T::Hash>;
 
 		// 被拉进黑名单的所有用户(现在已经移到register中）
@@ -134,7 +134,10 @@ decl_module! {
 			// 如果作弊者和举报人有至少有一个在黑名单里， 则不给举报。
 			// TODO 这个is_register_member方法需要进一步完善
 			ensure!( (<BlackList<T>>::exists(who.clone()) ||
-			<BlackList<T>>::exists(illegalman.clone())), "someone don't exists in register_list.");
+			<BlackList<T>>::exists(illegalman.clone())), "someone in the blacklist can't report.");
+
+			// 被举报人必须是注册过的。
+			ensure!(!Self::is_register_member(illegalman.clone()), "you are not the member of the register. ");
 
 			//  计算交易tx哈希值
 			let tx_hash = tx.using_encoded(<T as system::Trait>::Hashing::hash);
@@ -142,6 +145,8 @@ decl_module! {
 			ensure!(!<Votes<T>>::exists(&tx_hash), "the tx exists in the report queue, you can't put it into again.");
 			// 没有足够抵押资金，不给举报
 			T::Currency0::reserve(&who, T::ReportReserve::get()).map_err(|_| "balance too low, you can't report")?;
+
+			// 获取当前区块高度
 			let start_vote_block = <system::Module<T>>::block_number();
 			let mut vote_info = VoteInfo{
 				start_vote_block: start_vote_block.clone(),
@@ -158,7 +163,6 @@ decl_module! {
 				reject_mans:vec![],
 			};
 			// 判断投票者是否是议员
-			//TODO 判断是否是议员这个方法需要完善
 			if Self::is_concil_member(who.clone()) {
 				vote_info.approve_mans.push(who.clone());
 			}
@@ -351,7 +355,6 @@ impl<T: Trait> Module<T> {
 
 	// 是否在矿机的注册名单里面
 	pub fn is_register_member(who: T::AccountId) -> bool {
-//		true
 		if <AllMiners<T>>::exists(&who){
 			true
 		}
@@ -368,11 +371,13 @@ impl<T: Trait> Module<T> {
 
 	//--------------------------------------------------------------------------------------------
 	//获取国库id
+	// TODO 这里可能存在一个问题：国库账号可能还没有建立
 	pub fn get_treasury_id() -> T::AccountId {
 		MODULE_ID.into_account()
 	}
 
 	// 计算国库可用的钱
+	// TODO 这里可能存在一个问题：国库账号可能还没有建立
 	pub fn treasury_useable_balance() -> BalanceOf<T> {
 		T::Currency0::free_balance(&Self::get_treasury_id())
 			// Must never be less than 0 but better be safe.
@@ -433,24 +438,42 @@ impl<T: Trait> Module<T> {
 	pub fn treasury_imbalance(is_punish: IsPunished, vote:
 	VoteInfo<T::BlockNumber, T::AccountId, T::Balance, T::Hash>) -> (TreasuryNeed, BalanceOf<T>) {
 
+		let reporter = vote.clone().reporter;
+		let illegalman = vote.clone().illegal_man;
 		let mut postive: BalanceOf<T> = 0.into();
 		let mut negative: BalanceOf<T> = 0.into();
 		// 真的作弊
 		if is_punish == IsPunished::YES {
-			// 惩罚作弊者的金额
-			if !<BlackList<T>>::exists(vote.illegal_man.clone()) {
-				postive = T::IllegalPunishment::get();
+			// 惩罚作弊者的金额(注册过的人没有进入黑名单， 那么一定存在）
+			if !<BlackList<T>>::exists(reporter.clone()) {
+				if T::Currency0::total_balance(&reporter) >= T::IllegalPunishment::get(){
+					postive = T::IllegalPunishment::get();
+				}
+				else{
+					postive = T::Currency0::total_balance(&reporter);
+				}
+
 			}
 			// 奖励举报者的总金额
-			if !<BlackList<T>>::exists(vote.reporter.clone()) {
+			if !<BlackList<T>>::exists(reporter.clone()) {
+				// 数额巨大 不需要考虑存活问题
 				negative = T::ReportReward::get();
 			}
 		}
 		// 虚假举报
 		else {
 			// 惩罚举报者的金额
-			if !<BlackList<T>>::exists(vote.reporter.clone()) {
-				postive += T::ReportReserve::get().clone();
+			if !<BlackList<T>>::exists(reporter.clone()) {
+				// 账户必须要存在
+				if <system::AccountNonce<T>>::exists(reporter.clone()){
+					if T::Currency0::total_balance(&reporter) >= T::ReportReserve::get(){
+						postive += T::ReportReserve::get().clone();
+					}
+					else{
+						postive += T::Currency0::total_balance(&reporter);
+					}
+
+				}
 			}
 		}
 		// 议员总奖励金额
@@ -460,7 +483,20 @@ impl<T: Trait> Module<T> {
 		for i in 0..all_mans.clone().count() {
 			if let Some(peaple) = all_mans.next() {
 				if !<BlackList<T>>::exists(peaple.clone()) {
-					negative += T::CouncilReward::get().clone();
+					// 如果账户还存在
+					if <system::AccountNonce<T>>::exists(peaple.clone()){
+						// 这里代码可能冗余了  账户只要存在那么总金额肯定是大于最小存活金额的
+						if T::ReportReward::get() + T::Currency0::total_balance(&peaple) >= T::Currency0::minimum_balance(){
+							negative += T::CouncilReward::get().clone();
+						}
+					}
+						// 如果账户已经不存在
+					else{
+						if T::ReportReward::get() >= T::Currency0::minimum_balance(){
+							negative += T::CouncilReward::get().clone();
+						}
+					}
+
 				}
 			};
 		}
@@ -478,36 +514,66 @@ impl<T: Trait> Module<T> {
 	pub fn everyone_balance_oprate(is_punish: IsPunished,
 								   vote: VoteInfo<T::BlockNumber, T::AccountId, T::Balance, T::Hash>){
 
-		let illagalman = vote.illegal_man;
-		let reporter = vote.reporter;
-		// 如果作弊是真的
+		let reporter = vote.clone().reporter;
+		let illegalman = vote.clone().illegal_man;
+		// 真的作弊
 		if is_punish == IsPunished::YES {
-			// 惩罚作弊者
-			if !<BlackList<T>>::exists(illagalman.clone()) {
-				T::Currency0::slash_reserved(&illagalman, T::IllegalPunishment::get());
-			}
-			// 解除抵押并奖励举报人
+			// 惩罚作弊者的金额(注册过的人没有进入黑名单， 那么一定存在）
 			if !<BlackList<T>>::exists(reporter.clone()) {
+				if T::Currency0::total_balance(&reporter) >= T::IllegalPunishment::get(){
+					T::Currency0::slash_reserved(&illegalman, T::IllegalPunishment::get());
+				}
+				else{
+					T::Currency0::slash_reserved(&illegalman, T::Currency0::total_balance(&reporter));
+				}
+
+			}
+			if !<BlackList<T>>::exists(reporter.clone()) {
+				// 数额巨大 不需要考虑存活问题
 				T::Currency0::unreserve(&reporter, T::ReportReserve::get());
 				T::Currency0::deposit_creating(&reporter, T::ReportReward::get());
 			}
 		}
-
 		// 虚假举报
 		else {
-			// 扣除举报者金额
+			// 惩罚举报者的金额
 			if !<BlackList<T>>::exists(reporter.clone()) {
-				T::Currency0::slash_reserved(&reporter, T::ReportReserve::get());
+				// 账户必须要存在
+				if <system::AccountNonce<T>>::exists(reporter.clone()){
+					if T::Currency0::total_balance(&reporter) >= T::ReportReserve::get(){
+						T::Currency0::slash_reserved(&reporter, T::ReportReserve::get());
+
+					}
+					else{
+						T::Currency0::slash_reserved(&reporter, T::Currency0::total_balance(&reporter));
+					}
+
+				}
 			}
 		}
-		// 奖励议员
-		let mut all_mans = vote.reject_mans.iter()
-			.chain(vote.approve_mans.iter());
+		// 议员总奖励金额
+		let mut all_mans =
+			vote.reject_mans.iter().chain(vote.approve_mans.iter());
 
 		for i in 0..all_mans.clone().count() {
 			if let Some(peaple) = all_mans.next() {
 				if !<BlackList<T>>::exists(peaple.clone()) {
-					T::Currency0::deposit_creating(&peaple, T::CouncilReward::get());
+					// 如果账户还存在
+					if <system::AccountNonce<T>>::exists(peaple.clone()){
+						// 这里代码可能冗余了  账户只要存在那么总金额肯定是大于最小存活金额的
+						if T::ReportReward::get() + T::Currency0::total_balance(&peaple) >= T::Currency0::minimum_balance(){
+							T::Currency0::deposit_creating(&peaple, T::CouncilReward::get());
+						}
+					}
+
+						// 如果账户已经不存在
+					else{
+						if T::ReportReward::get() >= T::Currency0::minimum_balance(){
+							T::Currency0::deposit_creating(&peaple, T::CouncilReward::get());
+
+						}
+					}
+
 				}
 			};
 		}
