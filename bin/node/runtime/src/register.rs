@@ -213,8 +213,8 @@ impl <T: Trait> Module <T> {
 			// 如果还没有注册， 则直接退出
 
 			let bond :BalanceOf<T> = T::PledgeAmount::get();
-			T::Currency1::unreserve(&who, bond.clone());
-			// 归还抵押
+//			T::Currency1::unreserve(&who, bond.clone());
+			// 这个不需要归还抵押
 
 			let hardware_id = <AllMiners<T>>::get(who.clone()).hardware_id;
 			// 获取硬件id
