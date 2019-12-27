@@ -65,8 +65,9 @@ mod mine;
 mod mine_linked;
 mod mine_power;
 
-mod offchain_pricefetch;
-//mod expanded;
+//mod offchain_pricefetch;
+//mod expanded11;
+mod price_fetch;
 
 use impls::{CurrencyToVoteHandler, Author, LinearWeightToFee, TargetedFeeAdjustment};
 
@@ -77,17 +78,18 @@ use constants::{time::*, currency::*};
 /// Transx function used within the runtime.
 pub mod transx;
 
-pub mod offchain_pricefetch_crypto {
-	pub use crate::offchain_pricefetch::KEY_TYPE;
-	use primitives::sr25519;
-	app_crypto::app_crypto!(sr25519, KEY_TYPE);
-
-	impl From<Signature> for super::Signature {
-		fn from(a: Signature) -> Self {
-			sr25519::Signature::from(a).into()
-		}
-	}
-}
+//use crate::offchain_pricefetch::sr25519::{AuthorityId as OffchainPFAccount};
+//pub mod offchain_pricefetch_crypto {
+//	pub use crate::offchain_pricefetch::KEY_TYPE;
+//	use primitives::sr25519;
+//	app_crypto::app_crypto!(sr25519, KEY_TYPE);
+//
+//	impl From<Signature> for super::Signature {
+//		fn from(a: Signature) -> Self {
+//			sr25519::Signature::from(a).into()
+//		}
+//	}
+//}
 
 // Make the WASM binary available.
 #[cfg(feature = "std")]
@@ -239,6 +241,26 @@ impl_opaque_keys! {
 		pub authority_discovery: AuthorityDiscovery,
 	}
 }
+
+//pub mod opaque {
+//	use super::*;
+//
+//	pub use sp_runtime::OpaqueExtrinsic as UncheckedExtrinsic;
+//
+//	/// Opaque block header type.
+//	pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
+//	/// Opaque block type.
+//	pub type Block = generic::Block<Header, UncheckedExtrinsic>;
+//	/// Opaque block identifier type.
+//	pub type BlockId = generic::BlockId<Block>;
+//
+//	impl_opaque_keys! {
+//		pub struct SessionKeys {
+//			pub aura: Aura,
+//			pub grandpa: Grandpa,
+//		}
+//	}
+//}
 
 parameter_types! {
 	pub const DisabledValidatorsThreshold: Perbill = Perbill::from_percent(17);
@@ -469,6 +491,56 @@ impl im_online::Trait for Runtime {
 	type SessionDuration = SessionDuration;
 }
 
+// offchain_pricefetch
+//type OffchainPFAccount = offchain_pricefetch_crypto::Public;
+/*
+type SubmitPFTransaction = TransactionSubmitter<OffchainPFAccount, Runtime, UncheckedExtrinsic>;
+
+parameter_types! {
+	pub const TwoHour:BlockNumber = 2 * HOURS; // 每天有6个4小时
+	pub const OneDay:BlockNumber = DAYS;
+}
+
+impl offchain_pricefetch::Trait for Runtime {
+	type Call = Call;
+	type Event = Event;
+	type SubmitTransaction = SubmitPFTransaction;
+	type SubmitUnsignedTransaction = SubmitPFTransaction;
+	type AuthorityId = OffchainPFAccount;
+	type TwoHour = TwoHour;
+	type Day = OneDay;
+}
+*/
+
+parameter_types! {
+	pub const TwoHour:BlockNumber = 2 * HOURS; // 每天有6个4小时
+	pub const OneDay:BlockNumber = DAYS;
+}
+
+/// We need to define the Transaction signer for that using the Key definition
+type SubmitPriceFetchTransaction = system::offchain::TransactionSubmitter<
+    price_fetch::crypto::AuthorityId,
+    Runtime,
+    UncheckedExtrinsic
+>;
+
+parameter_types! {
+	pub const BlockFetchDur: BlockNumber = 2;
+}
+
+impl price_fetch::Trait for Runtime {
+    type Event = Event;
+    type Call = Call;
+    type SubmitSignedTransaction = SubmitPriceFetchTransaction;
+//    type SignAndSubmitTransaction = SubmitPriceFetchTransaction;
+    type SubmitUnsignedTransaction = SubmitPriceFetchTransaction;
+    type AuthorityId =price_fetch::crypto::AuthorityId;
+    type TwoHour = TwoHour;
+    type Day = OneDay;
+}
+
+
+
 impl offences::Trait for Runtime {
 	type Event = Event;
 	type IdentificationTuple = session::historical::IdentificationTuple<Self>;
@@ -668,28 +740,6 @@ impl mine::Trait for Runtime {
 	type ArchiveDuration = ArchiveDuration;
 }
 
-type OffchainPFAccount = offchain_pricefetch_crypto::Public;
-type SubmitPFTransaction = TransactionSubmitter<OffchainPFAccount, Runtime, UncheckedExtrinsic>;
-
-parameter_types! {
-	// 将算力汇总信息归档到链上并不再修改
-	pub const ArchiveDuration: BlockNumber = 10 * MINUTES;
-
-}
-
-parameter_types! {
-	pub const TwoHour:BlockNumber = 2 * HOURS; // 每天有6个4小时
-}
-
-impl offchain_pricefetch::Trait for Runtime {
-	type Call = Call;
-	type Event = Event;
-	type SubmitTransaction = SubmitPFTransaction;
-	type SubmitUnsignedTransaction = SubmitPFTransaction;
-	type AuthorityId = OffchainPFAccount;
-	type TwoHour = ();
-	type Day = ();
-}
 
 //pub mod workforce;
 //impl workforce for Runtime {
@@ -731,6 +781,8 @@ construct_runtime!(
 		Transx: transx::{Module, Call, Storage, Event<T>},
 		Register: register::{Module, Call, Storage, Event<T>},
 		Mine: mine::{Module, Storage, Call, Event<T>},
+//		OffchainPricefetch: offchain_pricefetch::{Module, Call, Storage, Event<T>, ValidateUnsigned},
+		PriceFetch: price_fetch::{Module, Call, Storage, Event<T>, ValidateUnsigned},
 	}
 );
 

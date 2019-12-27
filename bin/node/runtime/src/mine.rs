@@ -7,7 +7,7 @@ use sp_runtime::traits::{Hash,SimpleArithmetic, Bounded, One, Member,CheckedAdd}
 use codec::{Encode, Decode};
 use crate::mine_linked::{PersonMineWorkForce,PersonMine,MineParm,PersonMineRecord,BLOCK_NUMS};
 //use node_primitives::BlockNumber;
-use crate::register::{self,AllMiners,Trait as RegisterTrait};
+use crate::register::{self,MinersCount,AllMiners,Trait as RegisterTrait};
 use crate::mine_power::{PowerInfo, MinerPowerInfo, TokenPowerInfo, PowerInfoStore, MinerPowerInfoStore, TokenPowerInfoStore};
 use rstd::{result};
 use sp_runtime::traits::{Zero};

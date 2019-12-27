@@ -10,30 +10,92 @@
 
 
 // We have to import a few things
+//use simple_json::json::String;
 use rstd::prelude::*;
-use rstd::{collections::btree_map::BTreeMap};
 use app_crypto::RuntimeAppPublic;
 use support::traits::{Get};
-use support::{debug,decl_module, decl_storage, decl_event, print,StorageValue,StorageMap, dispatch::Result};
-use system::ensure_signed;
+use support::{debug,Parameter,decl_module, decl_storage, decl_event, print,StorageValue,StorageMap,StorageDoubleMap, dispatch::Result};
+use system::{ensure_signed,ensure_none};
 use system::offchain::{SubmitSignedTransaction, SubmitUnsignedTransaction};
-use codec::{Encode, Decode};
-use simple_json::{ self, json::JsonValue };
+use codec::{Encode, Decode,alloc::string::String};
+//use simple_json::{ self, json::JsonValue };
+use serde::{Serialize, Deserialize};
 use core::convert::{ TryInto };
 // use sp_runtime::traits::{Hash,SimpleArithmetic, Bounded, One, Member,CheckedAdd};
 use sp_runtime::{
     transaction_validity::{
         TransactionValidity, TransactionLongevity, ValidTransaction, InvalidTransaction
     },
-    traits::{CheckedSub,CheckedAdd},
+    traits::{CheckedSub,CheckedAdd,Printable,Member,Zero},
 };
 
 use primitives::{
 //	crypto::KeyTypeId,
     offchain,
 };
-use num_traits::real::Real;
 
+/// Our local KeyType.
+///
+/// For security reasons the offchain worker doesn't have direct access to the keys
+/// but only to app-specific subkeys, which are defined and grouped by their `KeyTypeId`.
+/// We define it here as `ofcb` (for `offchain callback`). Yours should be specific to
+/// the module you are actually building.
+pub const KEY_TYPE: app_crypto::KeyTypeId = app_crypto::KeyTypeId(*b"ofpf");
+
+pub mod sr25519 {
+    mod app_sr25519 {
+        use crate::offchain_pricefetch::KEY_TYPE;
+        use app_crypto::{app_crypto, sr25519};
+        app_crypto!(sr25519, KEY_TYPE);
+    }
+
+    /// An i'm online keypair using sr25519 as its crypto.
+    #[cfg(feature = "std")]
+    pub type AuthorityPair = app_sr25519::Pair;
+
+    /// An i'm online signature using sr25519 as its crypto.
+    pub type AuthoritySignature = app_sr25519::Signature;
+
+    /// An i'm online identifier using sr25519 as its crypto.
+    pub type AuthorityId = app_sr25519::Public;
+}
+
+pub mod ed25519 {
+    mod app_ed25519 {
+        use app_crypto::{app_crypto, key_types::IM_ONLINE, ed25519};
+        app_crypto!(ed25519, IM_ONLINE);
+    }
+
+    /// An i'm online keypair using ed25519 as its crypto.
+    #[cfg(feature = "std")]
+    pub type AuthorityPair = app_ed25519::Pair;
+
+    /// An i'm online signature using ed25519 as its crypto.
+    pub type AuthoritySignature = app_ed25519::Signature;
+
+    /// An i'm online identifier using ed25519 as its crypto.
+    pub type AuthorityId = app_ed25519::Public;
+}
+
+
+#[derive(Debug)]
+enum OffchainErr {
+    DecodeWorkerStatus,
+    FailedSigning,
+    NetworkState,
+    SubmitTransaction,
+}
+
+impl Printable for OffchainErr {
+    fn print(&self) {
+        match self {
+            OffchainErr::DecodeWorkerStatus => print("Offchain error: decoding WorkerStatus failed!"),
+            OffchainErr::FailedSigning => print("Offchain error: signing failed!"),
+            OffchainErr::NetworkState => print("Offchain error: fetching network state failed!"),
+            OffchainErr::SubmitTransaction => print("Offchain error: submitting transaction failed!"),
+        }
+    }
+}
 
 #[derive(Debug, Encode, Decode, Clone, PartialEq, Eq,Serialize, Deserialize)]
 pub struct Price<AccountId> {  // 存储币种价格
@@ -43,7 +105,8 @@ pub struct Price<AccountId> {  // 存储币种价格
     url:Vec<u8>,    // 对应的url,短写
 }
 
-#[derive(Debug, Encode, Decode, Clone, PartialEq, Eq,Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq,Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Data{
     id:String,
     symbol:String,
@@ -56,7 +119,7 @@ struct Data{
 
 }
 
-#[derive(Debug, Encode, Decode, Clone, PartialEq, Eq,Serialize, Deserialize)]
+#[derive(Debug,Clone, PartialEq, Eq,Serialize, Deserialize)]
 pub struct SymbolFetch {  // 存储币种价格
     data:Data,
     timestamp:u64,
@@ -73,15 +136,7 @@ pub struct PriceFailed<AccountId,Moment> {  // 存储币种价格
     errinfo:Vec<u8>,
 }
 
-type PriceFailedOf<T> = PriceFailed<T::AccountId,T::AccountId>;
-
-/// Our local KeyType.
-///
-/// For security reasons the offchain worker doesn't have direct access to the keys
-/// but only to app-specific subkeys, which are defined and grouped by their `KeyTypeId`.
-/// We define it here as `ofcb` (for `offchain callback`). Yours should be specific to
-/// the module you are actually building.
-pub const KEY_TYPE: app_crypto::KeyTypeId = app_crypto::KeyTypeId(*b"ofpf");
+type PriceFailedOf<T> = PriceFailed<<T as system::Trait>::AccountId,<T as timestamp::Trait>::Moment>;
 
 // This automates price fetching every certain blocks. Set to 0 disable this feature.
 //   Then you need to manucally kickoff pricefetch
@@ -114,7 +169,7 @@ pub trait Trait: timestamp::Trait + system::Trait+ authority_discovery::Trait{
     type SubmitUnsignedTransaction: SubmitUnsignedTransaction<Self, <Self as Trait>::Call>;
 
     /// The local AuthorityId
-    type AuthorityId: RuntimeAppPublic + From<Self::AccountId> + Into<Self::AccountId> + Clone;
+    type AuthorityId: Member + Parameter + RuntimeAppPublic + Default + Ord;
 
     type TwoHour: Get<Self::BlockNumber>;
     type Day: Get<Self::BlockNumber>;
@@ -130,10 +185,12 @@ pub enum OffchainRequest {
 
 decl_event!(
   pub enum Event<T> where
-    Moment = <T as timestamp::Trait>::Moment {
+    Moment = <T as timestamp::Trait>::Moment,
+    AccountId = <T as system::Trait>::AccountId,
+    {
 
-    PriceFetched(Vec<u8>, Vec<u8>, Moment, Price),
-    AggregatedPrice(Vec<u8>, Moment, Price),
+    PriceFetched(Vec<u8>, Vec<u8>, Moment, Price<AccountId>),
+    AggregatedPrice(Vec<u8>, Moment, Price<AccountId>),
   }
 );
 
@@ -148,12 +205,14 @@ decl_storage! {
 
     // storage about source price points
     // key:4小时的区块个数+币名字(名字统一小写), value:时间与币价格 .列表存放
-    pub PricePoints: get(price_pts) double_map T::BlockNumber, blake2_256(Vec<u8>) => Vec<(T::Moment, Price)>;
+    pub PricePoints get(price_pts): double_map T::BlockNumber, blake2_256(Vec<u8>) => Vec<(T::Moment, Price<T::AccountId>)>;
 
     // 记录 哪个节点ccountId,时间,哪个 url 没有查询到数据.保存一天数据.key: 币名字, value:时间 , url
-    pub SrcPriceFailed get(src_price_failed) map vec<u8> => Vec<(PriceFailedOf<T>)>
+    pub SrcPriceFailed get(src_price_failed): map Vec<u8> => Vec<(PriceFailedOf<T>)>;
 
-    ValidatorList get(get_validators) config(): Vec<T::AccountId>;
+    ValidatorList get(get_validators): Vec<T::AccountId>;
+
+    pub UpdateAggPP get(update_agg_pp): bool;
   }
 }
 
@@ -176,75 +235,80 @@ decl_module! {
 
     fn add_urls(origin,symbol:Vec<u8>,short_domain:Vec<u8>,url:Vec<u8>) {
         let author = ensure_signed(origin)?; //todo symbol是否该大小写转换
-        let symbol = rstd::str::from_utf8(&symbol).map_err(|e|"symbol from utf8 to str failed")?.to_lowercase().as_str();
+        let symbol = rstd::str::from_utf8(&symbol).map_err(|e|"symbol from utf8 to str failed")?.to_lowercase();
         if Self::is_authority(&author) {   // 高级节点才有权限添加
-            <FetchUrlList<T>>::mutate(|v| v.push((symbol,short_domain,url)));
+            <FetchUrlList>::mutate(|v| v.push((symbol.as_bytes().to_vec(),short_domain,url)));
         }
+        Ok(())
     }
+
     pub fn record_price(
         _origin,
         crypto_info: (Vec<u8>, Vec<u8>, Vec<u8>),
-        price: Price,
+        price: Price<T::AccountId>,
         _signature: <T::AuthorityId as RuntimeAppPublic>::Signature  // 需要验证
-    ) -> Result {
+    )  {
       let (symbol, remote_src) = (crypto_info.0, crypto_info.1); // coinName,
       let now = <timestamp::Module<T>>::get();
 
       // Debug printout
-      runtime_io::print_utf8(b"record_price: called");
-      runtime_io::print_utf8(&symbol);
-      runtime_io::print_utf8(&remote_src);
-      runtime_io::print_num(price.dollars.into());
-      runtime_io::print_num(price.cents.into());
+      runtime_io::misc::print_utf8(b"record_price: called");
+      runtime_io::misc::print_utf8(&symbol);
+      runtime_io::misc::print_utf8(&remote_src);
+      runtime_io::misc::print_num(price.dollars.into());
+      runtime_io::misc::print_num(price.cents.into());
 
       // Spit out an event and Add to storage
       Self::deposit_event(RawEvent::PriceFetched(
         symbol.clone(), remote_src.clone(), now.clone(), price.clone()));
 
       let price_pt = (now, price);
-      <SrcPricePoints<T>>::mutate(|vec| vec.push(price_pt));
-      // The index serves as the ID
-      let pp_id: u64 = Self::src_price_pts().len().try_into().unwrap();
-      <TokenSrcPPMap>::mutate(symbol, |token_vec| token_vec.push(pp_id));
-      <RemoteSrcPPMap>::mutate(remote_src, |rs_vec| rs_vec.push(pp_id));
+      let block_num = <system::Module<T>>::block_number();
+      let twohours = block_num / T::TwoHour::get();
+      <PricePoints<T>>::mutate(
+        &twohours,&crypto_info.0,
+        |vec| vec.push(price_pt),
+        );
 
+      // The index serves as the ID
       // set the flag to kick off update aggregated pricing
       <UpdateAggPP>::mutate(|flag| *flag = true);
 
       Ok(())
     }
 
-    fn record_fail_fetchprice( _origin,symbol:Vec<u8>,price_failed:PriceFailed){
+    fn record_fail_fetchprice( _origin,symbol:Vec<u8>,price_failed:PriceFailedOf<T>){
         // 记录获取price失败的信息
-        <SrcPriceFailed<T>>::mutate(symbol, |fetch_failed| token_.push(price_failed));
+        <SrcPriceFailed<T>>::mutate(symbol, |fetch_failed| fetch_failed.push(price_failed));
          Ok(())
     }
 
-    pub fn record_agg_pp(_origin, sym: Vec<u8>, price: Price) -> Result {
-      // Debug printout
-      runtime_io::print_utf8(b"record_agg_pp: called");
-      runtime_io::print_utf8(&sym);
-      runtime_io::print_num(price.dollars.into());
-      runtime_io::print_num(price.cents.into());
-
-      let now = <timestamp::Module<T>>::get();
-      // Turn off the flag for request has been handled
-      <UpdateAggPP>::mutate(|flag| *flag = false);
-
-      // Spit the event
-      Self::deposit_event(RawEvent::AggregatedPrice(
-        sym.clone(), now.clone(), price.clone()));
-
-      // Record in the storage
-      let price_pt = (now.clone(), price.clone());
-      <AggPricePoints<T>>::mutate(|vec| vec.push(price_pt));
-      let pp_id: u64 = Self::agg_price_pts().len().try_into().unwrap();
-      <TokenAggPPMap>::mutate(sym, |vec| vec.push(pp_id));
-
-      Ok(())
-    }
+//    pub fn record_agg_pp(_origin, sym: Vec<u8>, price: Price) -> Result {
+//      // Debug printout
+//      runtime_io::misc::print_utf8(b"record_agg_pp: called");
+//      runtime_io::misc::print_utf8(&sym);
+//      runtime_io::misc::print_num(price.dollars.into());
+//      runtime_io::misc::print_num(price.cents.into());
+//
+//      let now = <timestamp::Module<T>>::get();
+//      // Turn off the flag for request has been handled
+//      <UpdateAggPP>::mutate(|flag| *flag = false);
+//
+//      // Spit the event
+//      Self::deposit_event(RawEvent::AggregatedPrice(
+//        sym.clone(), now.clone(), price.clone()));
+//
+//      // Record in the storage
+//      let price_pt = (now.clone(), price.clone());
+//      <AggPricePoints<T>>::mutate(|vec| vec.push(price_pt));
+//      let pp_id: u64 = Self::agg_price_pts().len().try_into().unwrap();
+//      <TokenAggPPMap>::mutate(sym, |vec| vec.push(pp_id));
+//
+//      Ok(())
+//    }
 
     fn offchain_worker(_block: T::BlockNumber) {
+        debug::RuntimeLogger::init();
         if runtime_io::offchain::is_validator() { // 是否是验证人的模式启动
              if let Some(key) = Self::authority_id() {
                 Self::offchain(&key);
@@ -293,23 +357,30 @@ impl<T: Trait> Module<T> {
         // 验证是否
         // Type I task: fetch_price
         for fetch_info in Self::oc_requests() {
+            let remote_url_clone;
+            let sym_clone;
+            let remote_src_clone;
             let res = match fetch_info {
-                OffchainRequest::PriceFetch(sym, remote_src, remote_url) =>
-                // runtime_io::print_utf8(&remote_url);
-                    Self::fetch_price(sym, remote_src, remote_url)
+                OffchainRequest::PriceFetch(sym, remote_src, remote_url) =>{
+                // runtime_io::misc::print_utf8(&remote_url);
+                    remote_url_clone = remote_url.clone();
+                    sym_clone = sym.clone();
+                    remote_src_clone = remote_src.clone();
+                    Self::fetch_price(key,sym, remote_src, remote_url)
+                }
             };
             if let Err(err_msg) = res {
                 print(err_msg); // res的值可能是Err
                 let price_failed = PriceFailed {
                     dollars: 0,
                     cents: 0,
-                    account: T::AccountId,
-                    url: remote_url,
+                    account: key.clone(),
+                    url: remote_url_clone,
                     timestamp: <timestamp::Module<T>>::get(),
                     errinfo: err_msg.as_bytes().to_vec(),
                 };
                 // 上报 todo: 实现签名
-                let call = Call::record_fail_fetchprice((sym, remote_src, remote_url), price_failed);
+                let call = Call::record_fail_fetchprice((sym_clone, remote_src_clone, remote_url_clone), price_failed);
                 T::SubmitUnsignedTransaction::submit_unsigned(call)
                     .map_err(|_| "fetch_price: submit_unsigned_call error")
             };
@@ -327,7 +398,7 @@ impl<T: Trait> Module<T> {
             |i| (*i).clone().into()
         ).collect::<Vec<T::AccountId>>();
         Self::ValidatorList().into_iter().find(|i| i == who).is_some() ||
-            authorities.into_iter().find(i| i == who).is_some() // todo 待验证
+            authorities.into_iter().find(|i| i == who).is_some() // todo 待验证
     }
 
 
@@ -343,7 +414,10 @@ impl<T: Trait> Module<T> {
         ).collect::<Vec<T::AccountId>>();
         #[cfg(feature = "std")]{
             println!("----authority_id------{:?}",local_keys);}
-        Self::authorities().into_iter().find_map(|authority| {
+        let authorities = <authority_discovery::Module<T>>::authorities().iter().map(
+            |i| (*i).clone().into()
+        ).collect::<Vec<T::AccountId>>();
+        authorities().into_iter().find_map(|authority| {
             if local_keys.contains(&authority) {
                 Some(authority)
             } else {
@@ -367,8 +441,8 @@ impl<T: Trait> Module<T> {
 
 //    let deadline = now.checked_add(&T::Moment::from((10000 as u32).try_into().unwrap())).ok_or("mining function add overflow")?;
 //    let deadline = deadline.try_into().map_err(|_e| "you have err")?.try_into().unwrap();
-        let id = runtime_io::http_request_start("GET", remote_url, &[]).map_err(|_| "http_request start error")?;
-        let _ = runtime_io::http_response_wait(&[id], Some(offchain::Timestamp::from_unix_millis(deadline+20000)));
+        let id = runtime_io::offchain::http_request_start("GET", remote_url, &[]).map_err(|_| "http_request start error")?;
+        let _ = runtime_io::offchain::http_response_wait(&[id], Some(offchain::Timestamp::from_unix_millis(deadline+20000)));
         #[cfg(feature = "std")]{
             println!("-----------wait end {:?}------------",remote_url);
         }
@@ -376,7 +450,7 @@ impl<T: Trait> Module<T> {
         let mut json_result: Vec<u8> = vec![];
         loop {
             let mut buffer = vec![0; 1024];
-            let _read = runtime_io::http_response_read_body(id, &mut buffer, Some(offchain::Timestamp::from_unix_millis(deadline+20000)))
+            let _read = runtime_io::offchain::http_response_read_body(id, &mut buffer, Some(offchain::Timestamp::from_unix_millis(deadline+20000)))
                 .map_err(|_e|  _e);
             json_result = [&json_result[..], &buffer[..]].concat();
 //            let c = &json_result[..];
@@ -400,7 +474,7 @@ impl<T: Trait> Module<T> {
             println!("-----------fetch_json over{:?}------------",remote_url);
         }
         // Print out the whole JSON blob
-        runtime_io::print_utf8(&json_result);
+        runtime_io::misc::print_utf8(&json_result);
 
 //        let json_val: JsonValue = simple_json::parse_json(
 //            &rstd::str::from_utf8(&json_result).unwrap())
@@ -409,45 +483,48 @@ impl<T: Trait> Module<T> {
         Ok(json_result)
     }
 
-    fn fetch_price(sym: Vec<u8>, remote_src: Vec<u8>, remote_url: Vec<u8>) -> Result {
-        runtime_io::print_utf8(&sym);
-        runtime_io::print_utf8(&remote_src);
-        runtime_io::print_utf8(b"--fetch_json begin--");
+    fn fetch_price(key: &T::AccountId,sym: Vec<u8>, remote_src: Vec<u8>, remote_url: Vec<u8>) -> Result {
+        runtime_io::misc::print_utf8(&sym);
+        runtime_io::misc::print_utf8(&remote_src);
+        runtime_io::misc::print_utf8(b"--fetch_json begin--");
         let fetch_res = Self::fetch_json(rstd::str::from_utf8(&remote_url).unwrap())?;
-        runtime_io::print_utf8(b"--fetch_json over--");
+        runtime_io::misc::print_utf8(b"--fetch_json over--");
 
         let price = match remote_src.as_slice() { // 解析json
-            src if src == b"coincap" => Self::fetch_price_from_coincap(sym,remote_src,&fetch_res)
+            src if src == b"coincap" => Self::fetch_price_from_coincap(key,sym,remote_src,&fetch_res)
                 .map_err(|_| "fetch_price_from_coincap error")?,
             _ => return Err("Unknown remote source"),
         };
-        let signature = key.sign(&json.encode()).ok_or(OffchainErr::FailedSigning)?;
+
+
+        let signature = key.sign(&price.encode()).ok_or(OffchainErr::FailedSigning)?;
         // let call = Call::heartbeat(heartbeat_data, signature); // 打包部分
         let call = Call::record_price((sym, remote_src, remote_url), price);
         T::SubmitUnsignedTransaction::submit_unsigned(call)
             .map_err(|_| "fetch_price: submit_unsigned_call error")
     }
 
-    fn fetch_price_from_coincap(sym: Vec<u8>,remote_src:Vec<u8>,fetch: &[u8]) -> StdResult<Price<T::AccountId>> {
-        runtime_io::print_utf8(b"-- fetch_price_from_coincap");
+    fn fetch_price_from_coincap(key:&T::AccountId,sym: Vec<u8>,remote_src:Vec<u8>,fetch: &[u8]) -> StdResult<Price<T::AccountId>> {
+        runtime_io::misc::print_utf8(b"-- fetch_price_from_coincap");
         let symbol_fetch: SymbolFetch = serde_json::from_slice(fetch).map_err(|_|"utf-8 to price struct failed")?;
         let symbol_info = symbol_fetch.data;
         let price_usd = symbol_info.price_usd;
         let mut v:Vec<u64> = vec![];
-        for i in price.split("."){
+        for i in price_usd.split("."){
             v.push(i.parse::<u64>().unwrap());
         }
+        let remote_src = String::from_utf8(&remote_src).map_err(|e|"symbol from utf8 to str failed")?;
         let p = Price{
             dollars:v.0,
             cents:v.1,
-            account:T::AccountId,
-            url:remote_src
+            account:key,
+            url:remote_src,
         };
         Ok(p)
     }
 
     fn aggregate_pp() -> Result {
-        let mut pp_map = BTreeMap::new();
+//        let mut pp_map = BTreeMap::new();
 
         // TODO: calculate the map of sym -> pp
 //        pp_map.insert(b"BTC".to_vec(), Price::new(100, 3500, None));
@@ -469,7 +546,7 @@ impl<T: Trait> support::unsigned::ValidateUnsigned for Module<T> {
         let now = <timestamp::Module<T>>::get();
         match call {
             Call::record_price(..) => {
-                runtime_io::print_utf8(b"############## record_price ##############");
+                runtime_io::misc::print_utf8(b"############## record_price ##############");
                 Ok(ValidTransaction {
                     priority: 0,
                     requires: vec![],
@@ -478,7 +555,7 @@ impl<T: Trait> support::unsigned::ValidateUnsigned for Module<T> {
                     propagate: true,
                 })},
             Call::record_fail_fetchprice(..) => {
-                runtime_io::print_utf8(b"############## record_fail_fetchprice ##############");
+                runtime_io::misc::print_utf8(b"############## record_fail_fetchprice ##############");
                 Ok(ValidTransaction {
                     priority: 0,
                     requires: vec![],
@@ -492,69 +569,5 @@ impl<T: Trait> support::unsigned::ValidateUnsigned for Module<T> {
     }
 }
 
-/// tests for this module
-#[cfg(test)]
-mod tests {
-    use super::*;
+// tests for this module
 
-    use primitives::H256;
-    use support::{impl_outer_origin, assert_ok, parameter_types};
-    use sr_primitives::{
-        traits::{BlakeTwo256, IdentityLookup}, testing::Header, weights::Weight, Perbill,
-    };
-
-    impl_outer_origin! {
-    pub enum Origin for Test {}
-  }
-
-    // For testing the module, we construct most of a mock runtime. This means
-    // first constructing a configuration type (`Test`) which `impl`s each of the
-    // configuration traits of modules we want to use.
-    #[derive(Clone, Eq, PartialEq)]
-    pub struct Test;
-    parameter_types! {
-    pub const BlockHashCount: u64 = 250;
-    pub const MaximumBlockWeight: Weight = 1024;
-    pub const MaximumBlockLength: u32 = 2 * 1024;
-    pub const AvailableBlockRatio: Perbill = Perbill::from_percent(75);
-  }
-    impl system::Trait for Test {
-        type Origin = Origin;
-        type Call = ();
-        type Index = u64;
-        type BlockNumber = u64;
-        type Hash = H256;
-        type Hashing = BlakeTwo256;
-        type AccountId = u64;
-        type Lookup = IdentityLookup<Self::AccountId>;
-        type WeightMultiplierUpdate = ();
-        type Header = Header;
-        type Event = ();
-        type BlockHashCount = BlockHashCount;
-        type MaximumBlockWeight = MaximumBlockWeight;
-        type MaximumBlockLength = MaximumBlockLength;
-        type AvailableBlockRatio = AvailableBlockRatio;
-        type Version = ();
-    }
-    impl Trait for Test {
-        type Event = ();
-    }
-    type TemplateModule = Module<Test>;
-
-    // This function basically just builds a genesis storage key/value store according to
-    // our desired mockup.
-    fn new_test_ext() -> runtime_io::TestExternalities {
-        system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
-    }
-
-    #[test]
-    fn it_works_for_default_value() {
-        new_test_ext().execute_with(|| {
-            // Just a dummy test for the dummy funtion `do_something`
-            // calling the `do_something` function with a value 42
-            assert_ok!(TemplateModule::do_something(Origin::signed(1), 42));
-            // asserting that the stored value is equal to what we stored
-            assert_eq!(TemplateModule::something(), Some(42));
-        });
-    }
-}
