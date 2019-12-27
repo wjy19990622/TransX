@@ -26,7 +26,7 @@ use sp_runtime::{
     AnySignature,MultiSignature,MultiSigner,
     offchain::http, transaction_validity::{
     TransactionValidity, TransactionLongevity, ValidTransaction, InvalidTransaction},
-    traits::{CheckedSub,CheckedAdd,Printable,Member,Zero,IdentifyAccount},
+    traits::{CheckedSub,CheckedAdd,Printable,Member,Zero,AccountIdConversion,IdentifyAccount},
     RuntimeAppPublic};
 use app_crypto::{sr25519};
 
@@ -46,8 +46,10 @@ pub mod crypto {
     pub use super::{KEY_TYPE,Signature};
     pub mod app_sr25519 {
         pub use super::KEY_TYPE;
-        use app_crypto::{app_crypto, sr25519};
-        //use sp_runtime::app_crypto::{app_crypto, sr25519};
+//        use app_crypto::{app_crypto, sr25519};
+        use node_primitives::{AccountId};
+        use sp_runtime::{MultiSignature,MultiSigner};
+        use sp_runtime::app_crypto::{app_crypto, sr25519};
         app_crypto!(sr25519, KEY_TYPE);
 //        use primitives::sr25519;
 //        app_crypto::app_crypto!(sr25519, KEY_TYPE);
@@ -58,15 +60,19 @@ pub mod crypto {
             }
         }
 
-
-//        impl From<AccountId> for Public {
-//            fn from(inner: AccountId) -> Self { Self(inner) }
-//        }
-//        impl From<Public> for AccountId {
-//            fn from(outer: Public) -> Self {
-//                AccountId((x.0).0)
-//            }
-//        }
+        impl From<AccountId> for Public {
+            fn from(inner: AccountId) -> Self {
+                let s = <[u8; 32]>::from(inner);
+                let sr_public = sr25519::Public(s);
+                Self::from(sr_public)
+            }
+        }
+        impl From<Public> for AccountId {
+            fn from(outer: Public) -> Self {
+                let s: sr25519::Public = outer.into();
+                MultiSigner::from(s).into_account()
+            }
+        }
     }
 
 
@@ -118,7 +124,7 @@ pub trait Trait: timestamp::Trait + system::Trait + authority_discovery::Trait{
     type SubmitUnsignedTransaction: offchain::SubmitUnsignedTransaction<Self, <Self as Trait>::Call>;
 
     /// The local AuthorityId
-    type AuthorityId: RuntimeAppPublic + Clone+ From<sr25519::Public>+ Into<sr25519::Public>; // + From<Self::AccountId> + Into<Self::AccountId> + Clone;
+    type AuthorityId: RuntimeAppPublic + Clone+ From<Self::AccountId>;//+ Into<sr25519::Public>; // + From<Self::AccountId> + Into<Self::AccountId> + Clone;
 
     type TwoHour: Get<Self::BlockNumber>;
     type Day: Get<Self::BlockNumber>;
@@ -298,7 +304,7 @@ impl<T: Trait> Module<T> {
     }
 
     /// Find a local `AccountId` we can sign with, that is allowed to offchainwork
-    fn authority_id() -> Option<AccountId> { // 返回值 T::AccountId 改为 AccountId32
+    fn authority_id() -> Option<T::AccountId> { // 返回值 T::AccountId 改为 AccountId32
 //        return None
         //通过本地化的密钥类型查找此应用程序可访问的所有本地密钥。
         // 然后遍历当前存储在chain上的所有ValidatorList，并根据本地键列表检查它们，直到找到一个匹配，否则返回None。
@@ -306,14 +312,16 @@ impl<T: Trait> Module<T> {
             |i| {
                 let s: sr25519::Public = (*i).clone().into();
                 MultiSigner::from(s).into_account()
+//                <[u8; 32]>::from(s).into()
             }
-        ).collect::<Vec<AccountId>>();
+        ).collect::<Vec<T::AccountId>>();
         let local_keys = T::AuthorityId::all().iter().map(
             |i| {
                 let s: sr25519::Public =(*i).clone().into();
                 MultiSigner::from(s).into_account()
+               // <[u8; 32]>::from(s).into()
             }
-        ).collect::<Vec<AccountId>>();
+        ).collect::<Vec<T::AccountId>>();
         #[cfg(feature = "std")]{
             println!("----authority_id------{:?}",local_keys);}
         authorities.into_iter().find_map(|authority| {
