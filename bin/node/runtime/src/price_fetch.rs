@@ -26,7 +26,7 @@ use sp_runtime::{
     AnySignature,MultiSignature,MultiSigner,
     offchain::http, transaction_validity::{
     TransactionValidity, TransactionLongevity, ValidTransaction, InvalidTransaction},
-    traits::{CheckedSub,CheckedAdd,Printable,Member,Zero,AccountIdConversion,IdentifyAccount},
+    traits::{CheckedSub,CheckedAdd,Printable,Member,Zero,IdentifyAccount},
     RuntimeAppPublic};
 use app_crypto::{sr25519};
 
@@ -42,15 +42,21 @@ pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"ofpf");
 // REVIEW-CHECK: is it necessary to wrap-around storage vector at `MAX_VEC_LEN`?
 pub const MAX_VEC_LEN: usize = 1000;
 
+pub trait AccountIdPublicConver{
+    type AccountId;
+    fn into_account32(self)->Self::AccountId; // 转化为accountId
+}
+
+
 pub type Signature = AnySignature;
 pub mod crypto {
-    pub use super::{KEY_TYPE,Signature};
+    pub use super::{KEY_TYPE,AccountIdPublicConver,Signature};
     pub mod app_sr25519 {
-        pub use super::KEY_TYPE;
+        pub use super::{KEY_TYPE,AccountIdPublicConver};
 //        use app_crypto::{app_crypto, sr25519};
 //        use node_primitives::{AccountId};
         use sp_runtime::{MultiSignature,MultiSigner};
-        use sp_runtime::traits::IdentifyAccount;
+        use sp_runtime::traits::{IdentifyAccount};  // AccountIdConversion,
         use primitives::{crypto::AccountId32 as AccountId};
         use sp_runtime::app_crypto::{app_crypto, sr25519};
         app_crypto!(sr25519, KEY_TYPE);
@@ -77,6 +83,14 @@ pub mod crypto {
             }
         }
 
+
+        impl AccountIdPublicConver for Public{
+            type AccountId = AccountId;
+            fn into_account32(self) -> AccountId{
+                let s: sr25519::Public = self.into();
+                MultiSigner::from(s).into_account()
+            }
+        }
 
 
         impl IdentifyAccount for Public {
@@ -136,7 +150,7 @@ pub trait Trait: timestamp::Trait + system::Trait + authority_discovery::Trait{
     type SubmitUnsignedTransaction: offchain::SubmitUnsignedTransaction<Self, <Self as Trait>::Call>;
 
     /// The local AuthorityId
-    type AuthorityId: RuntimeAppPublic + Clone + From<Self::AccountId> + Into<Self::AccountId> + Into<sr25519::Public> + From<sr25519::Public>;
+    type AuthorityId: RuntimeAppPublic + Clone + Into<sr25519::Public> + From<sr25519::Public>+ AccountIdPublicConver<AccountId=Self::AccountId>; // From<Self::AccountId> + Into<Self::AccountId> +
 
     type TwoHour: Get<Self::BlockNumber>;
     type Day: Get<Self::BlockNumber>;
@@ -332,7 +346,7 @@ impl<T: Trait> Module<T> {
             let authority:T::AuthorityId = (*i).clone();
             let  authority_sr25519: sr25519::Public = authority.clone().into();
             if authorities.contains(&authority_sr25519) {
-                let s:T::AccountId= authority.into();
+                let s:T::AccountId= authority.into_account32();
                 return Some(s);
 //                return Some(T::AccountId::from((*i).clone()));
             }
