@@ -2,6 +2,7 @@
 **/*.rs.bk
 *.swp
 **/expanded.rs
+**/expanded*.rs
 .wasm-binaries
 pwasm-alloc/target/
 pwasm-libc/target/

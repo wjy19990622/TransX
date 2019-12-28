@@ -9,7 +9,7 @@
 
 // We have to import a few things
 use rstd::{prelude::*, convert::TryInto};
-use node_primitives::{AccountId};
+use primitives::{crypto::AccountId32 as AccountId};
 use primitives::{crypto::KeyTypeId};
 
 use support::{Parameter,decl_module, decl_storage, decl_event, dispatch, debug, traits::Get};
@@ -30,6 +30,7 @@ use sp_runtime::{
     RuntimeAppPublic};
 use app_crypto::{sr25519};
 
+
 type StdResult<T> = core::result::Result<T, &'static str>;
 
 /// Our local KeyType.
@@ -47,8 +48,10 @@ pub mod crypto {
     pub mod app_sr25519 {
         pub use super::KEY_TYPE;
 //        use app_crypto::{app_crypto, sr25519};
-        use node_primitives::{AccountId};
+//        use node_primitives::{AccountId};
         use sp_runtime::{MultiSignature,MultiSigner};
+        use sp_runtime::traits::IdentifyAccount;
+        use primitives::{crypto::AccountId32 as AccountId};
         use sp_runtime::app_crypto::{app_crypto, sr25519};
         app_crypto!(sr25519, KEY_TYPE);
 //        use primitives::sr25519;
@@ -73,9 +76,18 @@ pub mod crypto {
                 MultiSigner::from(s).into_account()
             }
         }
+
+
+
+        impl IdentifyAccount for Public {
+            type AccountId = AccountId;
+            fn into_account(self) -> AccountId {
+                let s: sr25519::Public = self.into();
+                <[u8; 32]>::from(s).into()
+            }
+        }
+
     }
-
-
 
     pub type AuthorityId = app_sr25519::Public;
 }
@@ -124,7 +136,7 @@ pub trait Trait: timestamp::Trait + system::Trait + authority_discovery::Trait{
     type SubmitUnsignedTransaction: offchain::SubmitUnsignedTransaction<Self, <Self as Trait>::Call>;
 
     /// The local AuthorityId
-    type AuthorityId: RuntimeAppPublic + Clone+ From<Self::AccountId>;//+ Into<sr25519::Public>; // + From<Self::AccountId> + Into<Self::AccountId> + Clone;
+    type AuthorityId: RuntimeAppPublic + Clone + From<Self::AccountId> + Into<Self::AccountId> + Into<sr25519::Public> + From<sr25519::Public>;
 
     type TwoHour: Get<Self::BlockNumber>;
     type Day: Get<Self::BlockNumber>;
@@ -305,32 +317,27 @@ impl<T: Trait> Module<T> {
 
     /// Find a local `AccountId` we can sign with, that is allowed to offchainwork
     fn authority_id() -> Option<T::AccountId> { // 返回值 T::AccountId 改为 AccountId32
-//        return None
+
         //通过本地化的密钥类型查找此应用程序可访问的所有本地密钥。
         // 然后遍历当前存储在chain上的所有ValidatorList，并根据本地键列表检查它们，直到找到一个匹配，否则返回None。
         let authorities = <authority_discovery::Module<T>>::authorities().iter().map(
-            |i| {
-                let s: sr25519::Public = (*i).clone().into();
-                MultiSigner::from(s).into_account()
+            |i| { // (*i).clone().into()
+                (*i).clone().into()
+//                MultiSigner::from(s).into_account()
 //                <[u8; 32]>::from(s).into()
             }
-        ).collect::<Vec<T::AccountId>>();
-        let local_keys = T::AuthorityId::all().iter().map(
-            |i| {
-                let s: sr25519::Public =(*i).clone().into();
-                MultiSigner::from(s).into_account()
-               // <[u8; 32]>::from(s).into()
+        ).collect::<Vec<sr25519::Public>>();
+
+        for i in T::AuthorityId::all().iter(){
+            let authority:T::AuthorityId = (*i).clone();
+            let  authority_sr25519: sr25519::Public = authority.clone().into();
+            if authorities.contains(&authority_sr25519) {
+                let s:T::AccountId= authority.into();
+                return Some(s);
+//                return Some(T::AccountId::from((*i).clone()));
             }
-        ).collect::<Vec<T::AccountId>>();
-        #[cfg(feature = "std")]{
-            println!("----authority_id------{:?}",local_keys);}
-        authorities.into_iter().find_map(|authority| {
-            if local_keys.contains(&authority) {
-                Some(authority)
-            } else {
-                None
-            }
-        })
+        }
+        return None;
     }
 
     fn fetch_json<'a>(remote_url: &'a [u8]) -> StdResult<JsonValue> {

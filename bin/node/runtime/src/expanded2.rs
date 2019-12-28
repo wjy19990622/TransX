@@ -63,7 +63,7 @@ pub mod impls {
 
 
     //mod offchain_pricefetch;
-    //mod expanded;
+    //mod expanded11;
 
 
 
@@ -7480,7 +7480,7 @@ mod price_fetch {
     /// For more guidance on Substrate modules, see the example module
     /// https://github.com/paritytech/substrate/blob/master/srml/example/src/lib.rs
     use rstd::{prelude::*, convert::TryInto};
-    use node_primitives::{AccountId};
+    use primitives::{crypto::AccountId32 as AccountId};
     use primitives::{crypto::KeyTypeId};
     use support::{Parameter, decl_module, decl_storage, decl_event, dispatch,
                   debug, traits::Get};
@@ -7498,7 +7498,9 @@ mod price_fetch {
                                             ValidTransaction,
                                             InvalidTransaction},
                      traits::{CheckedSub, CheckedAdd, Printable, Member, Zero,
-                              IdentifyAccount}, RuntimeAppPublic};
+                              AccountIdConversion, IdentifyAccount},
+                     RuntimeAppPublic};
+    use app_crypto::{sr25519};
     type StdResult<T> = core::result::Result<T, &'static str>;
     /// Our local KeyType.
     ///
@@ -7511,7 +7513,10 @@ mod price_fetch {
         pub use super::{KEY_TYPE, Signature};
         pub mod app_sr25519 {
             pub use super::KEY_TYPE;
-            use app_crypto::{app_crypto, sr25519};
+            use sp_runtime::{MultiSignature, MultiSigner};
+            use sp_runtime::traits::IdentifyAccount;
+            use primitives::{crypto::AccountId32 as AccountId};
+            use sp_runtime::app_crypto::{app_crypto, sr25519};
             #[doc =
               r" A generic `AppPublic` wrapper type over $public crypto; this has no specific App."]
             pub struct Public(sr25519::Public);
@@ -8213,6 +8218,29 @@ mod price_fetch {
                     sr25519::Signature::from(a).into()
                 }
             }
+            impl From<AccountId> for Public {
+                fn from(inner: AccountId) -> Self {
+                    let s = <[u8; 32]>::from(inner);
+                    let sr_public = sr25519::Public(s);
+                    Self::from(sr_public)
+                }
+            }
+            impl From<Public> for AccountId {
+                fn from(outer: Public) -> Self {
+                    let s: sr25519::Public = outer.into();
+                    MultiSigner::from(s).into_account()
+                }
+            }
+            impl IdentifyAccount for Public {
+                type
+                AccountId
+                =
+                AccountId;
+                fn into_account(self) -> AccountId {
+                    let s: sr25519::Public = self.into();
+                    <[u8; 32]>::from(s).into()
+                }
+            }
         }
         pub type AuthorityId = app_sr25519::Public;
     }
@@ -8612,7 +8640,11 @@ mod price_fetch {
         /// The local AuthorityId
         type
         AuthorityId: RuntimeAppPublic +
-        Clone;
+        Clone +
+        From<Self::AccountId> +
+        Into<Self::AccountId> +
+        Into<sr25519::Public> +
+        From<sr25519::Public>;
         type
         TwoHour: Get<Self::BlockNumber>;
         type
@@ -9808,7 +9840,7 @@ mod price_fetch {
                                                                                 "node_runtime::price_fetch",
                                                                                 tracing::Level::DEBUG,
                                                                                 Some("bin/node/runtime/src/price_fetch.rs"),
-                                                                                Some(170u32),
+                                                                                Some(191u32),
                                                                                 Some("node_runtime::price_fetch"),
                                                                                 ::tracing_core::field::FieldSet::new(&[],
                                                                                                                      ::tracing_core::callsite::Identifier(&MyCallsite)),
@@ -9900,7 +9932,7 @@ mod price_fetch {
                                                  &("node_runtime::price_fetch",
                                                    "node_runtime::price_fetch",
                                                    "bin/node/runtime/src/price_fetch.rs",
-                                                   187u32));
+                                                   208u32));
                     }
                 };
                 let price_info =
@@ -9952,7 +9984,7 @@ mod price_fetch {
                                                                                 "node_runtime::price_fetch",
                                                                                 tracing::Level::DEBUG,
                                                                                 Some("bin/node/runtime/src/price_fetch.rs"),
-                                                                                Some(170u32),
+                                                                                Some(191u32),
                                                                                 Some("node_runtime::price_fetch"),
                                                                                 ::tracing_core::field::FieldSet::new(&[],
                                                                                                                      ::tracing_core::callsite::Identifier(&MyCallsite)),
@@ -10045,7 +10077,7 @@ mod price_fetch {
                                                                                 "node_runtime::price_fetch",
                                                                                 tracing::Level::DEBUG,
                                                                                 Some("bin/node/runtime/src/price_fetch.rs"),
-                                                                                Some(170u32),
+                                                                                Some(191u32),
                                                                                 Some("node_runtime::price_fetch"),
                                                                                 ::tracing_core::field::FieldSet::new(&[],
                                                                                                                      ::tracing_core::callsite::Identifier(&MyCallsite)),
@@ -10129,7 +10161,7 @@ mod price_fetch {
                                                  &("node_runtime::price_fetch",
                                                    "node_runtime::price_fetch",
                                                    "bin/node/runtime/src/price_fetch.rs",
-                                                   235u32));
+                                                   256u32));
                     }
                 };
                 let now = <timestamp::Module<T>>::get();
@@ -10352,7 +10384,7 @@ mod price_fetch {
                                                                                                                           ::core::fmt::Display::fmt)],
                                                                                         }),
                                                        &("bin/node/runtime/src/price_fetch.rs",
-                                                         170u32, 1u32))
+                                                         191u32, 1u32))
                         }
                     }
                 }
@@ -10388,7 +10420,7 @@ mod price_fetch {
                                                                                                                           ::core::fmt::Display::fmt)],
                                                                                         }),
                                                        &("bin/node/runtime/src/price_fetch.rs",
-                                                         170u32, 1u32))
+                                                         191u32, 1u32))
                         }
                     }
                 }
@@ -10428,7 +10460,7 @@ mod price_fetch {
                                                                                                                           ::core::fmt::Display::fmt)],
                                                                                         }),
                                                        &("bin/node/runtime/src/price_fetch.rs",
-                                                         170u32, 1u32))
+                                                         191u32, 1u32))
                         }
                     }
                 }
@@ -10461,7 +10493,7 @@ mod price_fetch {
                     {
                         ::std::rt::begin_panic("internal error: entered unreachable code",
                                                &("bin/node/runtime/src/price_fetch.rs",
-                                                 170u32, 1u32))
+                                                 191u32, 1u32))
                     }
                 }
             }
@@ -10482,7 +10514,7 @@ mod price_fetch {
                                 {
                                     ::std::rt::begin_panic("internal error: entered unreachable code",
                                                            &("bin/node/runtime/src/price_fetch.rs",
-                                                             170u32, 1u32))
+                                                             191u32, 1u32))
                                 }
                             }
                             _ => false,
@@ -10502,7 +10534,7 @@ mod price_fetch {
                                 {
                                     ::std::rt::begin_panic("internal error: entered unreachable code",
                                                            &("bin/node/runtime/src/price_fetch.rs",
-                                                             170u32, 1u32))
+                                                             191u32, 1u32))
                                 }
                             }
                             _ => false,
@@ -10520,7 +10552,7 @@ mod price_fetch {
                                 {
                                     ::std::rt::begin_panic("internal error: entered unreachable code",
                                                            &("bin/node/runtime/src/price_fetch.rs",
-                                                             170u32, 1u32))
+                                                             191u32, 1u32))
                                 }
                             }
                             _ => false,
@@ -10531,7 +10563,7 @@ mod price_fetch {
                     {
                         ::std::rt::begin_panic("internal error: entered unreachable code",
                                                &("bin/node/runtime/src/price_fetch.rs",
-                                                 170u32, 1u32))
+                                                 191u32, 1u32))
                     }
                 }
             }
@@ -10590,7 +10622,7 @@ mod price_fetch {
                     {
                         ::std::rt::begin_panic("internal error: entered unreachable code",
                                                &("bin/node/runtime/src/price_fetch.rs",
-                                                 170u32, 1u32))
+                                                 191u32, 1u32))
                     }
                 }
             }
@@ -10636,7 +10668,7 @@ mod price_fetch {
                                                                                                                               ::core::fmt::Display::fmt)],
                                                                                             }),
                                                            &("bin/node/runtime/src/price_fetch.rs",
-                                                             170u32, 1u32))
+                                                             191u32, 1u32))
                             }
                         }
                     }
@@ -10757,7 +10789,7 @@ mod price_fetch {
                                                      &("node_runtime::price_fetch",
                                                        "node_runtime::price_fetch",
                                                        "bin/node/runtime/src/price_fetch.rs",
-                                                       277u32));
+                                                       298u32));
                         }
                     };
                     let price_failed =
@@ -10775,7 +10807,14 @@ mod price_fetch {
             Ok(())
         }
         /// Find a local `AccountId` we can sign with, that is allowed to offchainwork
-        fn authority_id() -> Option<T::AccountId> { return None }
+        fn authority_id() -> Option<T::AccountId> {
+            let authorities =
+                <authority_discovery::Module<T>>::authorities().iter().map(|i|
+                                                                               {
+                                                                                   (*i).clone().into()
+                                                                               }).collect::<Vec<sr25519::Public>>();
+            return None;
+        }
         fn fetch_json<'a>(remote_url: &'a [u8]) -> StdResult<JsonValue> {
             let remote_url_str =
                 core::str::from_utf8(remote_url).map_err(|_|
@@ -10803,7 +10842,7 @@ mod price_fetch {
                                                  &("node_runtime::price_fetch",
                                                    "node_runtime::price_fetch",
                                                    "bin/node/runtime/src/price_fetch.rs",
-                                                   331u32));
+                                                   355u32));
                     }
                 };
                 return Err("Non-200 status code returned from http request");
@@ -10839,7 +10878,7 @@ mod price_fetch {
                                              &("node_runtime::price_fetch",
                                                "node_runtime::price_fetch",
                                                "bin/node/runtime/src/price_fetch.rs",
-                                               353u32));
+                                               377u32));
                 }
             };
             let json = Self::fetch_json(remote_url)?;
@@ -12825,7 +12864,6 @@ pub mod transx {
         }
     }
 }
-
 /// Runtime version.
 pub const VERSION: RuntimeVersion =
     RuntimeVersion{spec_name: { std::borrow::Cow::Borrowed("node") },
