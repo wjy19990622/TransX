@@ -2,6 +2,7 @@
 **/*.rs.bk
 *.swp
 **/expanded.rs
+**/expanded2.rs
 **/offchain_pricefetch.rs
 bin/node/runtime/expand*.rs
 .wasm-binaries
