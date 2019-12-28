@@ -2,8 +2,7 @@
 **/*.rs.bk
 *.swp
 **/expanded.rs
-**/expanded12.rs
-**/expanded*.rs
+bin/node/runtime/expand*.rs
 .wasm-binaries
 pwasm-alloc/target/
 pwasm-libc/target/
