@@ -201,7 +201,7 @@ decl_module! {
 			<Votes<T>>::remove(tx_hash.clone());
 
 			// 删除个人相关的tx_hash
-			Self::remove_mantxhashs(who.clone(),tx_hash.clone());
+			Self::remove_mantxhashs(reporter.clone(),tx_hash.clone());
 			Self::remove_mantxhashs(illegalman.clone(),tx_hash.clone());
 			Self::deposit_event(RawEvent::RemoveManTxhashs(reporter.clone(), illegalman.clone()));
 
@@ -247,7 +247,7 @@ decl_module! {
 					// 把举报者的抵押归还
 					T::Currency0::unreserve(&reporter, T::ReportReserve::get());
 					// 删除相关的man thhashs信息
-					Self::remove_mantxhashs(who.clone(), tx_hash.clone());
+					Self::remove_mantxhashs(reporter.clone(), tx_hash.clone());
 					Self::remove_mantxhashs(illegalman.clone(), tx_hash.clone());
 					Self::deposit_event(RawEvent::RemoveManTxhashs(who.clone(), illegalman.clone()));
 
@@ -287,7 +287,7 @@ decl_module! {
 			if vote_result.0 == VoteResult::PASS{
 				// 把该投票结果存储到奖励名单
 				<RewardList<T>>::mutate(|a| a.push(voting.clone()));
-				Self::remove_mantxhashs(who.clone(),tx_hash.clone());
+				Self::remove_mantxhashs(reporter.clone(),tx_hash.clone());
 				Self::remove_mantxhashs(illegalman.clone(),tx_hash.clone());
 				Self::deposit_event(RawEvent::RemoveManTxhashs(who.clone(), illegalman.clone()));
 				// 如果作弊是真  把名字加入黑名单  并且从注册列表中删除  把该投票信息保存
