@@ -89,6 +89,9 @@ pub trait Trait: balances::Trait + RegisterTrait + elections_phragmen::Trait{
 	// 举报奖励
 	type ReportReward: Get<BalanceOf<Self>>;
 
+	// 撤销举报  举报者的惩罚金额
+	type CancelReportSlash: Get<BalanceOf<Self>>;
+
 	// 对作弊者的惩罚金额
 	type IllegalPunishment: Get<BalanceOf<Self>>;
 
@@ -176,20 +179,64 @@ decl_module! {
 		}
 
 
+		//------------------------------------------------------------------------------------------
+		// 取消举报
+		pub fn cancel_report(origin, tx_hash: T::Hash) -> Result{
+			/// 取消举报 只有该提案的举报者才有资格操作
+			let who = ensure_signed(origin)?;
+			// 交易不存在不能操作
+			ensure!(!(<Votes<T>>::exists(tx_hash.clone())), "the tx does not exists, you can't do it.");
+			let reporter = <Votes<T>>::get(tx_hash.clone()).reporter;
+			let illegalman = <Votes<T>>::get(tx_hash.clone()).illegal_man;
+
+			ensure!(!<BlackList<T>>::exists(who.clone()), "you are the member of the blacklist, can't cancel the report.");
+			// 不是举报者本人则不能取消该举报提案
+			ensure!((who.clone() == reporter.clone()), "you are not reporter, can't cancel it");
+
+
+			// 如果提案已经结束 则不能再取消
+			ensure!(Self::vote_result(<Votes<T>>::get(tx_hash.clone())).0 == VoteResult::NoPASS, "the vote have allready passed, can't cancel it");
+
+			// 从Votes中删除该提案
+			<Votes<T>>::remove(tx_hash.clone());
+
+			// 删除个人相关的tx_hash
+			Self::remove_mantxhashs(who.clone(),tx_hash.clone());
+			Self::remove_mantxhashs(illegalman.clone(),tx_hash.clone());
+			Self::deposit_event(RawEvent::RemoveManTxhashs(reporter.clone(), illegalman.clone()));
+
+			// 归还举报者个人抵押
+			T::Currency0::unreserve(&reporter, T::ReportReserve::get());
+
+			// 惩罚举报者1个token
+			T::Currency0::slash_reserved(&reporter, T::CancelReportSlash::get());
+
+			Self::deposit_event(RawEvent::CancelReportEvent(reporter.clone(), tx_hash.clone()));
+
+			Ok(())
+		}
+
+
 		//-----------------------------------------------------------------------------------------
 		// 投票
 		pub fn vote(origin, tx_hash: T::Hash, yes_no: bool) -> Result{
+			/// 投票 只有议员可以操作
+
 			// 如果自己不是议会成员则不给操作
 			let who = T::ConcilOrigin::ensure_origin(origin)?;
 			// 判断这个tx_hash是否存在于投票队列中，不存在则退出
 			ensure!(!(<Votes<T>>::exists(&tx_hash)), "the tx_hash not in vote_queue.");
 			let illegalman = <Votes<T>>::get(&tx_hash).illegal_man;
+			let reporter = <Votes<T>>::get(&tx_hash).reporter;
+
+			// 如果该投票的议员进入黑名单 则不能参与投票
+			ensure!(!(<BlackList<T>>::exists(who.clone())), "you are the member of the blacklist, can't vote.");
 
 			// 如果这个议会成员是作弊者（被举报方），则禁止其投票。
 			ensure!(!(illegalman.clone() == who.clone()), "you are being reported, can't vote.");
 
 			// 如果举报者和作弊者有至少有一个在黑名单列表中， 则退出。
-			ensure!( (<BlackList<T>>::exists(who.clone()) ||
+			ensure!( (<BlackList<T>>::exists(reporter.clone()) ||
 			<BlackList<T>>::exists(illegalman.clone())), "someone don't exists in register_list.");
 
 			let now = <system::Module<T>>::block_number();
@@ -198,10 +245,12 @@ decl_module! {
 					<Votes<T>>::remove(&tx_hash);
 					// TODO 添加和删除方法均已经实现， 注意查看代码是否正确
 					// 把举报者的抵押归还
-					T::Currency0::unreserve(&<Votes<T>>::get(&tx_hash).reporter, T::ReportReserve::get());
+					T::Currency0::unreserve(&reporter, T::ReportReserve::get());
 					// 删除相关的man thhashs信息
 					Self::remove_mantxhashs(who.clone(), tx_hash.clone());
 					Self::remove_mantxhashs(illegalman.clone(), tx_hash.clone());
+					Self::deposit_event(RawEvent::RemoveManTxhashs(who.clone(), illegalman.clone()));
+
 					ensure!(1==2, "the vote is expire.")
 			}
 			let mut voting = <Votes<T>>::get(&tx_hash);
@@ -240,6 +289,7 @@ decl_module! {
 				<RewardList<T>>::mutate(|a| a.push(voting.clone()));
 				Self::remove_mantxhashs(who.clone(),tx_hash.clone());
 				Self::remove_mantxhashs(illegalman.clone(),tx_hash.clone());
+				Self::deposit_event(RawEvent::RemoveManTxhashs(who.clone(), illegalman.clone()));
 				// 如果作弊是真  把名字加入黑名单  并且从注册列表中删除  把该投票信息保存
 				if vote_result.1 == IsPunished::YES{
 					<BlackList<T>>::insert(illegalman.clone(), tx_hash.clone());
@@ -274,6 +324,12 @@ decl_event!(
 		// 开始的区块 被举报者姓名
 		ReportEvent(BlockNumber, AccountId),
 
+		// 取消提案
+		CancelReportEvent(AccountId, Hash),
+
+		//删除mantxhashs
+		RemoveManTxhashs(AccountId, AccountId),
+
 		// 正在投谁的票
 		VoteEvent(AccountId),
 
@@ -285,6 +341,8 @@ decl_event!(
 
 		// 谁的票奖励结束了 tx哈希是多少
 		RewardEvent(AccountId, Hash),
+
+
 
 		SomethingStored(u32, AccountId),
 	}

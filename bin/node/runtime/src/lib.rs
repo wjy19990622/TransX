@@ -401,9 +401,11 @@ parameter_types!{
 	pub const IllegalPunishment: Balance = 500*DOLLARS;
 	pub const CouncilReward: Balance = 10*DOLLARS;
 	pub const Threshould: u32 = 7;
+	pub const CancelReportSlash: Balance = 1*DOLLARS;
 }
 
 impl report::Trait for Runtime {
+	type CancelReportSlash = CancelReportSlash;
 	type Thredshould = Threshould;
 	type ConcilOrigin = collective::EnsureMember<AccountId, CouncilCollective>;
 	type Currency0 = Balances;
