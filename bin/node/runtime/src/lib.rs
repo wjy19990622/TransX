@@ -67,7 +67,7 @@ mod mine_power;
 
 //mod offchain_pricefetch;
 //mod expanded2;
-mod price_fetch;
+pub mod price_fetch;
 
 use impls::{CurrencyToVoteHandler, Author, LinearWeightToFee, TargetedFeeAdjustment};
 
@@ -513,7 +513,7 @@ impl offchain_pricefetch::Trait for Runtime {
 */
 
 parameter_types! {
-	pub const TwoHour:BlockNumber = 2 * HOURS; // 每天有6个4小时
+	pub const TwoHour:BlockNumber = 3 ; // TODO:上线环境改为 2 小时
 	pub const OneDay:BlockNumber = DAYS;
 }
 

@@ -41,6 +41,8 @@ use network::NetworkService;
 use offchain::OffchainWorkers;
 use primitives::Blake2Hasher;
 
+use node_runtime::price_fetch;
+
 construct_simple_protocol! {
 	/// Demo protocol attachment for substrate.
 	pub struct NodeProtocol where Block = Block { }
@@ -125,14 +127,15 @@ macro_rules! new_full {
 			is_authority,
 			force_authoring,
 			name,
-			disable_grandpa
+			disable_grandpa,
+			dev_seed
 		) = (
 			$config.roles.is_authority(),
 			$config.force_authoring,
 			$config.name.clone(),
-			$config.disable_grandpa
+			$config.disable_grandpa,
+			$config.dev_key_seed.clone()
 		);
-
 		// sentry nodes announce themselves as authorities to the network
 		// and should run the same protocols authorities do, but it should
 		// never actively participate in any consensus process.
@@ -153,6 +156,18 @@ macro_rules! new_full {
 			)?
 			.with_dht_event_tx(dht_event_tx)?
 			.build()?;
+
+		  // 添加以下部分以将密钥添加到keystore
+		  if let Some(seed) = dev_seed {
+			service
+			  .keystore()
+			  .write()
+			  .insert_ephemeral_from_seed_by_type::<price_fetch::crypto::AuthorityPair>(
+				&seed,
+				price_fetch::KEY_TYPE,
+			  )
+			  .expect("Dev Seed should always succeed.");
+		  }
 
 		let (block_import, grandpa_link, babe_link) = import_setup.take()
 				.expect("Link Half and Block Import are present for Full Services or setup failed before. qed");

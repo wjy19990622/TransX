@@ -104,6 +104,8 @@ pub mod crypto {
     }
 
     pub type AuthorityId = app_sr25519::Public;
+    #[cfg(feature = "std")]
+    pub type AuthorityPair = app_sr25519::Pair;
 }
 
 
@@ -150,7 +152,7 @@ pub trait Trait: timestamp::Trait + system::Trait + authority_discovery::Trait{
     type SubmitUnsignedTransaction: offchain::SubmitUnsignedTransaction<Self, <Self as Trait>::Call>;
 
     /// The local AuthorityId
-    type AuthorityId: RuntimeAppPublic + Clone + Into<sr25519::Public> + From<sr25519::Public>+ AccountIdPublicConver<AccountId=Self::AccountId>; // From<Self::AccountId> + Into<Self::AccountId> +
+    type AuthorityId: RuntimeAppPublic + Clone + Parameter+ Into<sr25519::Public> + From<sr25519::Public>+ AccountIdPublicConver<AccountId=Self::AccountId>; // From<Self::AccountId> + Into<Self::AccountId> +
 
     type TwoHour: Get<Self::BlockNumber>;
     type Day: Get<Self::BlockNumber>;
@@ -341,12 +343,13 @@ impl<T: Trait> Module<T> {
 //                <[u8; 32]>::from(s).into()
             }
         ).collect::<Vec<sr25519::Public>>();
-
+        debug::info!("本地key: {:?}",authorities);
         for i in T::AuthorityId::all().iter(){
             let authority:T::AuthorityId = (*i).clone();
             let  authority_sr25519: sr25519::Public = authority.clone().into();
             if authorities.contains(&authority_sr25519) {
                 let s:T::AccountId= authority.into_account32();
+                debug::info!("找到了账号: {:?}",s);
                 return Some(s);
 //                return Some(T::AccountId::from((*i).clone()));
             }
