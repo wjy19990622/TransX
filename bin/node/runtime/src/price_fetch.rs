@@ -10,7 +10,7 @@
 // We have to import a few things
 use rstd::{prelude::*, convert::TryInto};
 use primitives::{crypto::AccountId32 as AccountId};
-use primitives::{crypto::KeyTypeId};
+use primitives::{crypto::KeyTypeId,offchain::Timestamp};
 
 use support::{Parameter,decl_module, decl_storage, decl_event, dispatch, debug, traits::Get,StorageLinkedMap};
 use system::{ ensure_signed,ensure_none, offchain,
@@ -109,13 +109,13 @@ pub mod crypto {
 }
 
 
-pub const FETCHED_CRYPTOS: [(&[u8], &[u8], &[u8]); 1] = [
+pub const FETCHED_CRYPTOS: [(&[u8], &[u8], &[u8]); 3] = [
     (b"btc", b"coincap",
      b"https://api.coincap.io/v2/assets/bitcoin"),
-//    (b"btc", b"cryptocompare",
-//     b"https://min-api.cryptocompare.com/data/price?fsym=BTC&tsyms=USD"),
-//    (b"eth", b"coincap",
-//     b"https://api.coincap.io/v2/assets/ethereum"),
+    (b"btc", b"cryptocompare",
+     b"https://min-api.cryptocompare.com/data/price?fsym=BTC&tsyms=USD"),
+    (b"eth", b"coincap",
+     b"https://api.coincap.io/v2/assets/ethereum"),
 //    (b"eth", b"cryptocompare",
 //     b"https://min-api.cryptocompare.com/data/price?fsym=ETH&tsyms=USD"),
 //    (b"dai", b"coincap",
@@ -228,7 +228,7 @@ impl<T: Trait> Module<T> {
                     errinfo: e.as_bytes().to_vec(),
                 };
                 // 上报 todo: 实现错误信息上报记录
-                let call = Call::record_fail_fetchprice(sym.to_vec(), price_failed);
+                let call = Call::record_fail_fetchprice(block_num,sym.to_vec(), price_failed);
                 T::SubmitUnsignedTransaction::submit_unsigned(call)
                     .map_err(|_| {
                         debug::info!("===record_fail_fetchprice: submit_unsigned_call error===");
@@ -269,11 +269,20 @@ impl<T: Trait> Module<T> {
         let remote_url_str = core::str::from_utf8(remote_url)
             .map_err(|_| "Error in converting remote_url to string")?;
 
-        let pending = http::Request::get(remote_url_str).send()
+        let now = <timestamp::Module<T>>::get();
+        let deadline:u64 = now.try_into().
+            map_err(|_|"An error occurred when moment was converted to usize")?  // usize类型
+            .try_into().map_err(|_|"An error occurred when usize was converted to u64")?;
+        let deadline = Timestamp::from_unix_millis(deadline+20000); // 等待最多10s
+
+        let mut new_reuest = http::Request::get(remote_url_str);
+        new_reuest.deadline = Some(deadline);
+        let pending = new_reuest.send()
             .map_err(|_| "Error in sending http GET request")?;
 
-        let response = pending.wait()
+        let http_result = pending.try_wait(deadline)
             .map_err(|_| "Error in waiting http response back")?;
+        let response = http_result.map_err(|_| "Error in waiting http_result convert response" )?;
 
         if response.code != 200 {
             debug::warn!("Unexpected status code: {}", response.code);
@@ -423,7 +432,7 @@ decl_module! {
                     let (sym,blocknum_list) = key_value;
                     let index_len = blocknum_list.len();
                     debug::info!("------清理工作------------");
-                    debug::info!("key_value: {:?}, {:?},and len={:?}",sym,blocknum_list,index_len);
+                    debug::info!("key_value: {:?}, {:?},and len={:?}",core::str::from_utf8(&sym).unwrap(),blocknum_list,index_len);
                     if index_len == 1{ // 只有1个就不删除
                         continue;
                     }
@@ -517,7 +526,7 @@ decl_module! {
     }
 
 
-    fn record_fail_fetchprice(_origin,symbol:Vec<u8>,price_failed:PriceFailedOf<T>)->dispatch::Result{
+    fn record_fail_fetchprice(_origin,block:T::BlockNumber,symbol:Vec<u8>,price_failed:PriceFailedOf<T>)->dispatch::Result{
         // 记录获取price失败的信息
         ensure_none(_origin)?;
         <SrcPriceFailed<T>>::mutate(symbol, |fetch_failed| fetch_failed.push(price_failed));
@@ -583,27 +592,27 @@ impl<T: Trait> support::unsigned::ValidateUnsigned for Module<T> {
     fn validate_unsigned(call: &Self::Call) -> TransactionValidity {
         let now = <timestamp::Module<T>>::get();
         match call {
-            Call::record_price(..) => {
+            Call::record_price(block,(sym, remote_src, ..),price,account_id) => {
                 debug::info!("############## record_price :{:?}##############",now);
                 Ok(ValidTransaction {
                 priority: 0,
                 requires: vec![],
-                provides: vec![(now).encode()],
+                provides: vec![(block, sym, remote_src, account_id).encode()],
                 longevity: TransactionLongevity::max_value(),
                 propagate: true,
                 })
             },
-            Call::record_fail_fetchprice(..) => {
+            Call::record_fail_fetchprice(block,sym,price_failed) => {
                 debug::info!("############## record_fail_fetchprice :{:?}##############",now);
                 Ok(ValidTransaction {
-                priority: 0,
+                priority: 1,
                 requires: vec![],
-                provides: vec![(now).encode()],
+                provides: vec![(block,sym,price_failed).encode()], // vec![(now).encode()],
                 longevity: TransactionLongevity::max_value(),
                 propagate: true,
             })},
             Call::record_agg_pp(..) => Ok(ValidTransaction {
-                priority: 0,
+                priority: 2,
                 requires: vec![],
                 provides: vec![(now).encode()],
                 longevity: TransactionLongevity::max_value(),
