@@ -31,6 +31,12 @@
     "dollars": "u64",
     "account": "AccountId",
     "url": "Vec<u8>"
-  }
+  },
+  "PriceFailed":{
+    "account": "AccountId",
+    "sym": "Vec<u8>",
+    "errinfo": "Vec<u8>"
+  },
+  "PriceFailedOf": "PriceFailed"
 }
 ```

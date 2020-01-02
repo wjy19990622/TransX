@@ -109,7 +109,8 @@ pub mod crypto {
 }
 
 
-pub const FETCHED_CRYPTOS: [(&[u8], &[u8], &[u8]); 3] = [
+// todo 仅仅测试用,后改为链表,方便链上添加与修改
+pub const FETCHED_CRYPTOS: [(&[u8], &[u8], &[u8]); 4] = [
     (b"btc", b"coincap",
      b"https://api.coincap.io/v2/assets/bitcoin"),
     (b"btc", b"cryptocompare",
@@ -120,8 +121,8 @@ pub const FETCHED_CRYPTOS: [(&[u8], &[u8], &[u8]); 3] = [
 //     b"https://min-api.cryptocompare.com/data/price?fsym=ETH&tsyms=USD"),
 //    (b"dai", b"coincap",
 //     b"https://api.coincap.io/v2/assets/dai"),
-//    (b"dai", b"cryptocompare",
-//     b"https://min-api.cryptocompare.com/data/price?fsym=DAI&tsyms=USD"),
+    (b"dai", b"cryptocompare",
+     b"https://min-api.cryptocompare.com/data/price?fsym=DAI&tsyms=USD"),
 ];
 
 #[derive(Debug, Encode, Decode, Clone, PartialEq, Eq)]
@@ -132,15 +133,14 @@ pub struct PriceInfo<AccountId> {  // 存储币种价格
 }
 
 #[derive(Debug, Encode, Decode, Clone, PartialEq)]
-pub struct PriceFailed<AccountId,Moment> {  // 存储币种价格
+pub struct PriceFailed<AccountId> {  // 存储币种价格
     // dollars: u64,   // 0.0001美元为单位
     account: AccountId, //哪个账号查询到的
-    url:Vec<u8>,    // 对应的url
-    timestamp:Moment,
+    sym:Vec<u8>,    // 对应的币名字
     errinfo:Vec<u8>,
 }
 
-type PriceFailedOf<T> = PriceFailed<<T as system::Trait>::AccountId,<T as timestamp::Trait>::Moment>;
+type PriceFailedOf<T> = PriceFailed<<T as system::Trait>::AccountId>;
 
 /// The module's configuration trait.
 pub trait Trait: timestamp::Trait + system::Trait + authority_discovery::Trait{
@@ -155,7 +155,7 @@ pub trait Trait: timestamp::Trait + system::Trait + authority_discovery::Trait{
     type AuthorityId: RuntimeAppPublic + Clone + Parameter+ Into<sr25519::Public> + From<sr25519::Public>+ AccountIdPublicConver<AccountId=Self::AccountId>; // From<Self::AccountId> + Into<Self::AccountId> +
 
     type TwoHour: Get<Self::BlockNumber>;
-    type Day: Get<Self::BlockNumber>;
+    type Hour: Get<Self::BlockNumber>;
 
     // Wait period between automated fetches. Set to 0 disable this feature.
     //   Then you need to manucally kickoff pricefetch
@@ -192,6 +192,7 @@ decl_storage! {
 
     // 记录 哪个节点ccountId,时间,哪个 url 没有查询到数据.保存一天数据.key: 币名字, value:时间 , url .每天删除一次
     pub SrcPriceFailed get(src_price_failed): linked_map Vec<u8> => Vec<(PriceFailedOf<T>)>;
+    pub SrcPriceFailedCnt get(pricefailed_cnt): linked_map Vec<u8> => u64;
 
 
     // todo 以下多余
@@ -223,11 +224,10 @@ impl<T: Trait> Module<T> {
                 // 处理错误信息
                 let price_failed = PriceFailed {
                     account: key.clone(),
-                    url: (*remote_url).to_vec(),
-                    timestamp: <timestamp::Module<T>>::get(),
+                    sym: (*sym).to_vec(),
                     errinfo: e.as_bytes().to_vec(),
                 };
-                // 上报 todo: 实现错误信息上报记录
+                // 实现错误信息上报记录
                 let call = Call::record_fail_fetchprice(block_num,sym.to_vec(), price_failed);
                 T::SubmitUnsignedTransaction::submit_unsigned(call)
                     .map_err(|_| {
@@ -445,13 +445,13 @@ decl_module! {
             }
         }
 
-        // 每天清理错误的列表 SrcPriceFailed
-        if (block_num % T::Day::get()).is_zero() {
-            let duration = block_num / T::TwoHour::get();
+        // 每天清理错误的列表 SrcPriceFailed todo:TwoHour 改为 DAY
+        if (block_num % T::Hour::get()).is_zero() {
             // delete
             for key_value in <DeletePricePoints<T>>::enumerate().into_iter(){
                  let (sym,_) = key_value;
-                 <SrcPriceFailed<T>>::remove(sym);
+                 <SrcPriceFailed<T>>::remove(&sym);
+                 SrcPriceFailedCnt::remove(&sym);
             }
         }
     }
@@ -529,7 +529,8 @@ decl_module! {
     fn record_fail_fetchprice(_origin,block:T::BlockNumber,symbol:Vec<u8>,price_failed:PriceFailedOf<T>)->dispatch::Result{
         // 记录获取price失败的信息
         ensure_none(_origin)?;
-        <SrcPriceFailed<T>>::mutate(symbol, |fetch_failed| fetch_failed.push(price_failed));
+        <SrcPriceFailed<T>>::mutate(&symbol, |fetch_failed| fetch_failed.push(price_failed));
+        SrcPriceFailedCnt::mutate(&symbol,|cnt|*cnt += 1);
         debug::info!("------上链成功:record_fail_fetchprice--------");
          Ok(())
     }

@@ -540,8 +540,8 @@ impl offchain_pricefetch::Trait for Runtime {
 */
 
 parameter_types! {
-	pub const TwoHour:BlockNumber = 3 ; // TODO:上线环境改为 2 小时
-	pub const OneDay:BlockNumber = DAYS;
+	pub const TwoHour:BlockNumber = 3 ; // TODO:上线环境改为 2 小时 2*HOURS
+	pub const Hour:BlockNumber = HOURS;
 }
 
 /// We need to define the Transaction signer for that using the Key definition
@@ -563,7 +563,7 @@ impl price_fetch::Trait for Runtime {
     type SubmitUnsignedTransaction = SubmitPriceFetchTransaction;
     type AuthorityId =price_fetch::crypto::AuthorityId;
     type TwoHour = TwoHour;
-    type Day = OneDay;
+    type Hour = Hour;
 }
 
 
