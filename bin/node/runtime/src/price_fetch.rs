@@ -186,7 +186,7 @@ decl_storage! {
     //
     // key:币名字(名字统一小写)+4小时的区块个数, value:时间与币价格 .列表存放 .每个周期删除一次
     PricePoints get(price_pts): double_map Vec<u8>, blake2_256(T::BlockNumber) => Vec<(T::Moment, PriceInfo<T::AccountId>)>;
-    // 待删除的
+    // 待删除的  key:币名字  value:4小时的区块周期数
     DeletePricePoints get(del_price_pts): linked_map Vec<u8> => Vec<T::BlockNumber>;
 
 
@@ -300,7 +300,6 @@ impl<T: Trait> Module<T> {
         remote_url: &'a [u8],
         current_time:T::Moment
     ) -> dispatch::Result {
-
         debug::info!("***fetch price***: {:?}:{:?},{:?}",
             core::str::from_utf8(sym).unwrap(),
             core::str::from_utf8(remote_src).unwrap(),
@@ -308,7 +307,6 @@ impl<T: Trait> Module<T> {
         );
 
         let json = Self::fetch_json(remote_url)?;
-
         let price = match remote_src {
             src if src == b"coincap" => Self::fetch_price_from_coincap(json)
                 .map_err(|_| "fetch_price_from_coincap error"),
@@ -424,6 +422,7 @@ decl_module! {
                  for key_value in <DeletePricePoints<T>>::enumerate().into_iter(){ // sym,vec<>, linked_map的作用
                     let (sym,blocknum_list) = key_value;
                     let index_len = blocknum_list.len();
+                    debug::info!("------清理工作------------");
                     debug::info!("key_value: {:?}, {:?},and len={:?}",sym,blocknum_list,index_len);
                     if index_len == 1{ // 只有1个就不删除
                         continue;
@@ -432,7 +431,7 @@ decl_module! {
                        <PricePoints<T>>::remove(&sym,block_num); // i32
                     }
                     // DeletePricePoints 也只保留一个
-                    <DeletePricePoints<T>>::mutate(&sym,|vec| &blocknum_list[index_len-1..]);
+                    <DeletePricePoints<T>>::insert(&sym,&blocknum_list[index_len-1..]);
                 }
             }
         }
@@ -447,6 +446,7 @@ decl_module! {
             }
         }
     }
+
 
     pub fn record_price(
       origin,
@@ -481,12 +481,17 @@ decl_module! {
         let length = delete_ppoints.len();
         if length !=0{
             let last_index = delete_ppoints[length-1];
-            if last_index < duration{
+            if last_index < duration{  // duration 表示当前的4小时区块周期数
                 <DeletePricePoints<T>>::mutate(
                 &crypto_info.0,
                 |vec| vec.push(duration),
                 );
             }
+        }else{
+            <DeletePricePoints<T>>::mutate(
+                &crypto_info.0,
+                |vec| vec.push(duration),
+                );
         }
 
       // Spit out an event and Add to storage
