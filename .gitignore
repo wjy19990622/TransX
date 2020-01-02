@@ -5,6 +5,7 @@
 #**/expanded2.rs
 **/offchain_pricefetch.rs
 bin/node/runtime/src/expand*.rs
+bin/node/runtime/src/test.md
 .wasm-binaries
 pwasm-alloc/target/
 pwasm-libc/target/
@@ -23,3 +24,4 @@ rls*.log
 *.rej
 **/wip/*.stderr
 .local
+

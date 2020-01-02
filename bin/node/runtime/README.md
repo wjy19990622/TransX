@@ -1,4 +1,6 @@
 ## settings/developer
+配置json格式
+```json
 {
   "MineIndex": "u64",
   "BlockNumberOf": "u32",
@@ -31,3 +33,4 @@
     "url": "Vec<u8>"
   }
 }
+```

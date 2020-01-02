@@ -1,6 +1,5 @@
 |学好|姓名|
 |---|---|
-|100|韦俊远|
 |101|程海莹|
 'pub fn treasury_imbalance(is_punish: IsPunished, vote:
 	VoteInfo<T::BlockNumber, T::AccountId, T::Balance, T::Hash>) -> (TreasuryNeed, BalanceOf<T>) '   
