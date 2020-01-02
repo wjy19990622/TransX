@@ -656,6 +656,7 @@ pub fn print(print: impl traits::Printable) {
 mod tests {
 	use crate::DispatchError;
 	use codec::{Encode, Decode};
+	use primitives::RuntimeDebug;
 
 	#[test]
 	fn opaque_extrinsic_serialization() {
@@ -679,6 +680,35 @@ mod tests {
 				module: Some(1),
 				error: 2,
 				message: None,
+			},
+		);
+	}
+
+	#[test]
+	fn dispatch_encoding() {
+		#[derive(Eq, PartialEq, Clone, Encode, Decode,RuntimeDebug)]
+		pub struct DispatchError {
+			/// Module index, matching the metadata module index
+			pub module: Option<u8>,
+			/// Module specific error value
+			pub error: u8,
+			/// Optional error message.
+			pub message:Vec<u8>,
+		}
+		let error = DispatchError {
+			module: Some(1),
+			error: 2,
+			message: Some(vec![1,2,3]),
+		};
+		let encoded = error.encode();
+		let decoded = DispatchError::decode(&mut &encoded[..]).unwrap();
+		assert_eq!(encoded, vec![1, 1, 2, 1, 12, 1, 2, 3]);
+		assert_eq!(
+			decoded,
+			DispatchError {
+				module: Some(1),
+				error: 2,
+				message: Some(vec![1,2,3]),
 			},
 		);
 	}

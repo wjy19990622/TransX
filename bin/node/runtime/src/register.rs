@@ -37,10 +37,10 @@ decl_storage! {
 		pub AllMiners get(fn allminers): map T::AccountId => MinerInfo<T::AccountId, T::Moment>;
 		TokenInfo: double_map hasher(twox_64_concat) T::AccountId, blake2_256(Vec<u8>) => Vec<u8>;
 		AllRegisters get(fn allregisters):  map Vec<u8> => T::AccountId;
-		MinersCount: u64;
 
 		// 黑名单  只有举报模块调用
 		pub BlackList get(fn blacklist): map T::AccountId => T::Hash;
+		pub MinersCount: u64;
 	}
 }
 

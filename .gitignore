@@ -2,6 +2,9 @@
 **/*.rs.bk
 *.swp
 **/expanded.rs
+#**/expanded2.rs
+**/offchain_pricefetch.rs
+bin/node/runtime/src/expand*.rs
 .wasm-binaries
 pwasm-alloc/target/
 pwasm-libc/target/
