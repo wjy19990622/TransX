@@ -178,7 +178,6 @@ decl_event!(
 // This module's storage items.
 decl_storage! {
   trait Store for Module<T: Trait> as PriceFetch {
-    UpdateAggPP get(update_agg_pp): linked_map Vec<u8> => u32 = 0;
 
     // storage about source price points
     // mapping of ind -> (timestamp, price)
@@ -198,17 +197,13 @@ decl_storage! {
 
 
     // todo 以下多余
-    SrcPricePoints get(src_price_pts): Vec<(T::Moment, u64)>;
+//    SrcPricePoints get(src_price_pts): Vec<(T::Moment, u64)>;
     // mapping of token sym -> pp_ind
     // Using linked map for easy traversal from offchain worker or UI
-    TokenSrcPPMap: linked_map Vec<u8> => Vec<u32>;
 
     // mapping of remote_src -> pp_ind
-    RemoteSrcPPMap: linked_map Vec<u8> => Vec<u32>;
 
     // storage about aggregated price points (calculated with our logic)
-    AggPricePoints get(agg_price_pts): Vec<(T::Moment, u64)>;
-    TokenAggPPMap: linked_map Vec<u8> => Vec<u32>;
   }
 }
 
@@ -217,7 +212,7 @@ impl<T: Trait> Module<T> {
         for (sym, remote_src, remote_url) in FETCHED_CRYPTOS.iter() {
             let current_time = <timestamp::Module<T>>::get();
             if let Err(e) = Self::fetch_price(block_num,key.clone(),account,*sym, *remote_src, *remote_url,current_time) {
-                debug::error!("------Error fetching------: {:?}, {:?}: {:?},{:?}",
+                debug::error!("~~~~~~~~~~Error fetching~~~~~~~~~~~~: {:?}, {:?}: {:?},{:?}",
                     core::str::from_utf8(sym).unwrap(),
                     core::str::from_utf8(remote_src).unwrap(),
                     e,
@@ -396,29 +391,6 @@ impl<T: Trait> Module<T> {
         Ok(val_u64)
     }
 
-    fn aggregate_pp<'a>(block: T::BlockNumber, sym: &'a [u8], freq: usize) -> dispatch::Result {
-        let ts_pp_vec = <TokenSrcPPMap>::get(sym);
-
-        // use the last `freq` number of prices and average them
-        let amt: usize = if ts_pp_vec.len() > freq { freq } else { ts_pp_vec.len() };
-        let pp_inds: &[u32] = ts_pp_vec.get((ts_pp_vec.len() - amt)..ts_pp_vec.len())
-            .ok_or("aggregate_pp: extracting TokenSrcPPMap error")?;
-
-        let src_pp_vec: Vec<_> = Self::src_price_pts();
-        let price_sum: u64 = pp_inds.iter().fold(0, |mem, ind| mem + src_pp_vec[*ind as usize].1);
-        let price_avg: u64 = (price_sum as f64 / amt as f64).round() as u64;
-
-        // submit onchain call for aggregating the price
-        let call = Call::record_agg_pp(block, sym.to_vec(), price_avg);
-
-        // Unsigned tx
-        T::SubmitUnsignedTransaction::submit_unsigned(call)
-            .map_err(|_| "aggregate_pp: submit_signed(call) error")
-
-        // Signed tx
-        // T::SubmitSignedTransaction::submit_signed(call);
-        // Ok(())
-    }
 }
 
 
@@ -480,13 +452,6 @@ decl_module! {
       // 转化为小写的字节码
       let sym_string = core::str::from_utf8(sym).map_err(|e|"symbol from utf8 to str failed")?.to_lowercase();
       let sym = &sym_string.as_bytes().to_vec();
-      // Debug printout
-      debug::info!("----上链: record_price-----: {:?}, {:?}, {:?}",
-        core::str::from_utf8(sym).unwrap(),
-        core::str::from_utf8(remote_src).unwrap(),
-        price
-      );
-
       // Spit out an event and Add to storage
       let price_info = PriceInfo{dollars:price.clone(),account:account_id,url:crypto_info.1.clone()};
       let price_pt = (now, price_info);
@@ -519,15 +484,8 @@ decl_module! {
         sym.clone(), remote_src.clone(), now.clone(), price));
 
        // todo : 多余
-      let price_pt = (now, price);
       // The index serves as the ID
-      let pp_id: u32 = Self::src_price_pts().len().try_into().unwrap();
-      <SrcPricePoints<T>>::mutate(|vec| vec.push(price_pt));
-      <TokenSrcPPMap>::mutate(sym.clone(), |token_vec| token_vec.push(pp_id));
-      <RemoteSrcPPMap>::mutate(remote_src, |rs_vec| rs_vec.push(pp_id));
-
       // set the flag to kick off update aggregated pricing in offchain call
-      <UpdateAggPP>::mutate(sym.clone(), |freq| *freq += 1);
       debug::info!("----上链成功: record_price-----: {:?}, {:?}, {:?}",
             core::str::from_utf8(sym).unwrap(),
             core::str::from_utf8(remote_src).unwrap(),
@@ -544,37 +502,6 @@ decl_module! {
         SrcPriceFailedCnt::mutate(&symbol,|cnt|*cnt += 1);
         debug::info!("------上链成功:record_fail_fetchprice--------");
          Ok(())
-    }
-
-
-    pub fn record_agg_pp(
-      origin,
-      _block: T::BlockNumber,
-      sym: Vec<u8>,
-      price: u64
-    ) -> dispatch::Result {
-      // Debug printout
-      debug::info!("record_agg_pp: {:?}: {:?}",
-        core::str::from_utf8(&sym).unwrap(),
-        price
-      );
-
-      let now = <timestamp::Module<T>>::get();
-
-      // Spit the event
-      Self::deposit_event(RawEvent::AggregatedPrice(
-        sym.clone(), now.clone(), price.clone()));
-
-      // Record in the storage
-      let price_pt = (now.clone(), price.clone());
-      let pp_id: u32 = Self::agg_price_pts().len().try_into().unwrap();
-      <AggPricePoints<T>>::mutate(|vec| vec.push(price_pt));
-      <TokenAggPPMap>::mutate(sym.clone(), |vec| vec.push(pp_id));
-
-      // Turn off the flag as the request has been handled
-      <UpdateAggPP>::mutate(sym.clone(), |freq| *freq = 0);
-
-      Ok(())
     }
 
 
@@ -613,6 +540,7 @@ impl<T: Trait> support::unsigned::ValidateUnsigned for Module<T> {
                 });
 
                 if !signature_valid {
+                    debug::info!("................ record_price 签名验证失败 .....................");
                     return InvalidTransaction::BadProof.into();
                 }
 
@@ -633,13 +561,6 @@ impl<T: Trait> support::unsigned::ValidateUnsigned for Module<T> {
                 longevity: TransactionLongevity::max_value(),
                 propagate: true,
             })},
-            Call::record_agg_pp(..) => Ok(ValidTransaction {
-                priority: 2,
-                requires: vec![],
-                provides: vec![(now).encode()],
-                longevity: TransactionLongevity::max_value(),
-                propagate: true,
-            }),
             _ => InvalidTransaction::Call.into()
         }
     }
