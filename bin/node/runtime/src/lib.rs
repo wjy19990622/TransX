@@ -67,7 +67,7 @@ mod mine_linked;
 mod mine_power;
 
 //mod offchain_pricefetch;
-//mod expanded2;
+//mod expanded3;
 pub mod price_fetch;
 
 use impls::{CurrencyToVoteHandler, Author, LinearWeightToFee, TargetedFeeAdjustment};

@@ -12,7 +12,7 @@ use rstd::{prelude::*, convert::TryInto};
 use primitives::{crypto::AccountId32 as AccountId};
 use primitives::{crypto::KeyTypeId,offchain::Timestamp};
 
-use support::{Parameter,decl_module, decl_storage, decl_event, dispatch, debug, traits::Get,StorageLinkedMap};
+use support::{print,Parameter,decl_module, decl_storage, decl_event, dispatch, debug, traits::Get,StorageLinkedMap};
 use system::{ ensure_signed,ensure_none, offchain,
               offchain::SubmitSignedTransaction,
               offchain::SubmitUnsignedTransaction,
@@ -29,6 +29,7 @@ use sp_runtime::{
     traits::{CheckedSub,CheckedAdd,Printable,Member,Zero,IdentifyAccount},
     RuntimeAppPublic};
 use app_crypto::{sr25519};
+use crate::price_fetch::crypto::AuthorityId;
 
 type BlockNumberOf<T> = <T as system::Trait>::BlockNumber;  // u32
 type StdResult<T> = core::result::Result<T, &'static str>;
@@ -69,20 +70,21 @@ pub mod crypto {
             }
         }
 
+
         impl From<AccountId> for Public {
-            fn from(inner: AccountId) -> Self {
+            fn from(inner: AccountId) -> Self { //不能利用 Public::from(T::Account);因为T::Account 不是 AccountId.只有into函数可用
                 let s = <[u8; 32]>::from(inner);
                 let sr_public = sr25519::Public(s);
                 Self::from(sr_public)
             }
         }
-        impl From<Public> for AccountId {
+
+        impl From<Public> for AccountId {// 只能用 pulic.into
             fn from(outer: Public) -> Self {
                 let s: sr25519::Public = outer.into();
                 MultiSigner::from(s).into_account()
             }
         }
-
 
         impl AccountIdPublicConver for Public{
             type AccountId = AccountId;
@@ -152,7 +154,7 @@ pub trait Trait: timestamp::Trait + system::Trait + authority_discovery::Trait{
     type SubmitUnsignedTransaction: offchain::SubmitUnsignedTransaction<Self, <Self as Trait>::Call>;
 
     /// The local AuthorityId
-    type AuthorityId: RuntimeAppPublic + Clone + Parameter+ Into<sr25519::Public> + From<sr25519::Public>+ AccountIdPublicConver<AccountId=Self::AccountId>; // From<Self::AccountId> + Into<Self::AccountId> +
+    type AuthorityId: RuntimeAppPublic + Clone + Parameter+ Into<sr25519::Public> + From<sr25519::Public>+ AccountIdPublicConver<AccountId=Self::AccountId>; // From<Self::AccountId> + Into<Self::AccountId>
 
     type TwoHour: Get<Self::BlockNumber>;
     type Hour: Get<Self::BlockNumber>;
@@ -211,10 +213,10 @@ decl_storage! {
 }
 
 impl<T: Trait> Module<T> {
-    fn offchain(block_num:T::BlockNumber,key: &T::AccountId) -> dispatch::Result{
+    fn offchain(block_num:T::BlockNumber,key: T::AuthorityId, account: &T::AccountId) -> dispatch::Result{
         for (sym, remote_src, remote_url) in FETCHED_CRYPTOS.iter() {
             let current_time = <timestamp::Module<T>>::get();
-            if let Err(e) = Self::fetch_price(block_num,key,*sym, *remote_src, *remote_url,current_time) {
+            if let Err(e) = Self::fetch_price(block_num,key.clone(),account,*sym, *remote_src, *remote_url,current_time) {
                 debug::error!("------Error fetching------: {:?}, {:?}: {:?},{:?}",
                     core::str::from_utf8(sym).unwrap(),
                     core::str::from_utf8(remote_src).unwrap(),
@@ -223,7 +225,7 @@ impl<T: Trait> Module<T> {
                     );
                 // 处理错误信息
                 let price_failed = PriceFailed {
-                    account: key.clone(),
+                    account: account.clone(),
                     sym: (*sym).to_vec(),
                     errinfo: e.as_bytes().to_vec(),
                 };
@@ -241,7 +243,7 @@ impl<T: Trait> Module<T> {
     }
 
     /// Find a local `AccountId` we can sign with, that is allowed to offchainwork
-    fn authority_id() -> Option<T::AccountId> { // 返回值 T::AccountId 改为 AccountId32
+    fn authority_id() -> (Option<T::AuthorityId>,Option<T::AccountId>) {
         //通过本地化的密钥类型查找此应用程序可访问的所有本地密钥。
         // 然后遍历当前存储在chain上的所有ValidatorList，并根据本地键列表检查它们，直到找到一个匹配，否则返回None。
         let authorities = <authority_discovery::Module<T>>::authorities().iter().map(
@@ -256,13 +258,13 @@ impl<T: Trait> Module<T> {
             let authority:T::AuthorityId = (*i).clone();
             let  authority_sr25519: sr25519::Public = authority.clone().into();
             if authorities.contains(&authority_sr25519) {
-                let s:T::AccountId= authority.into_account32();
+                let s:T::AccountId= authority.clone().into_account32();
                 debug::info!("找到了账号: {:?}",s);
-                return Some(s);
+                return (Some(authority),Some(s));
 //                return Some(T::AccountId::from((*i).clone()));
             }
         }
-        return None;
+        return (None,None);
     }
 
     fn fetch_json<'a>(remote_url: &'a [u8]) -> StdResult<JsonValue> {
@@ -303,6 +305,7 @@ impl<T: Trait> Module<T> {
 
     fn fetch_price<'a>(
         block_num:T::BlockNumber,
+        key:T::AuthorityId,
         account_id:&T::AccountId,
         sym: &'a [u8],
         remote_src: &'a [u8],
@@ -325,10 +328,15 @@ impl<T: Trait> Module<T> {
         }?;
 
         debug::info!("当前的区块为:{:?}",block_num);
+        let signature = key.sign(&(block_num, sym, remote_src, account_id).encode()).ok_or("Offchain error: signing failed!")?;
         let call = Call::record_price(
             block_num,
-            (sym.to_vec(), remote_src.to_vec(), remote_url.to_vec()),
-            price,account_id.clone());
+            account_id.clone(),
+            key,
+            price,
+            (sym.to_vec(), remote_src.to_vec()),
+            signature
+        );
 
         // Unsigned tx
         T::SubmitUnsignedTransaction::submit_unsigned(call)
@@ -445,7 +453,7 @@ decl_module! {
             }
         }
 
-        // 每天清理错误的列表 SrcPriceFailed todo:TwoHour 改为 DAY
+        // 每天清理错误的列表 SrcPriceFailed
         if (block_num % T::Hour::get()).is_zero() {
             // delete
             for key_value in <DeletePricePoints<T>>::enumerate().into_iter(){
@@ -460,8 +468,11 @@ decl_module! {
     pub fn record_price(
       origin,
       _block_num:T::BlockNumber,
-      crypto_info: (Vec<u8>, Vec<u8>, Vec<u8>),
-      price: u64,account_id: T::AccountId
+      account_id: T::AccountId,
+      key: T::AuthorityId,
+      price: u64,
+      crypto_info: (Vec<u8>, Vec<u8>),
+      _signature: <T::AuthorityId as RuntimeAppPublic>::Signature
     ) ->dispatch::Result {
       ensure_none(origin)?;
       let (sym, remote_src) = (&crypto_info.0, &crypto_info.1);
@@ -572,13 +583,13 @@ decl_module! {
       // Type I task: fetch_price
       if duration > 0.into() && block % duration == 0.into() {
         if runtime_io::offchain::is_validator() { // 是否是验证人的模式启动
-             if let Some(key) = Self::authority_id() {
-                Self::offchain(block,&key);
+//             let Some(key),Some(account) = Self::authority_id()
+             if let (Some(authorityId),Some(account)) = Self::authority_id() {
+                Self::offchain(block,authorityId,&account);
             }
         }
       }
     } // end of `fn offchain_worker()`
-
   }
 }
 
@@ -593,12 +604,22 @@ impl<T: Trait> support::unsigned::ValidateUnsigned for Module<T> {
     fn validate_unsigned(call: &Self::Call) -> TransactionValidity {
         let now = <timestamp::Module<T>>::get();
         match call {
-            Call::record_price(block,(sym, remote_src, ..),price,account_id) => {
+            Call::record_price(block_num,account_id,key,price,(sym, remote_src),signature) => {
                 debug::info!("############## record_price :{:?}##############",now);
+
+                // check signature (this is expensive so we do it last).
+                let signature_valid = &(block_num, sym, remote_src, account_id).using_encoded(|encoded_sign| {
+                    key.verify(&encoded_sign, &signature)
+                });
+
+                if !signature_valid {
+                    return InvalidTransaction::BadProof.into();
+                }
+
                 Ok(ValidTransaction {
                 priority: 0,
                 requires: vec![],
-                provides: vec![(block, sym, remote_src, account_id).encode()],
+                provides: vec![(block_num, sym, remote_src, account_id).encode()],
                 longevity: TransactionLongevity::max_value(),
                 propagate: true,
                 })
