@@ -27,7 +27,7 @@ use support::{
 	traits::{SplitTwoWays, Currency, Randomness},
 };
 use primitives::u32_trait::{_1, _2, _3, _4};
-use node_primitives::{AccountId, AccountIndex, Balance, BlockNumber, Hash, Index, Moment, Signature, Count, USD, Workforce};
+use node_primitives::{AccountId, AccountIndex, Balance, BlockNumber, Hash, Index, Moment, Signature, Count, USD, Workforce, Percent_U64};
 use sp_api::impl_runtime_apis;
 use sp_runtime::{Permill, Perbill, ApplyExtrinsicResult, impl_opaque_keys, generic, create_runtime_str};
 use sp_runtime::curve::PiecewiseLinear;
@@ -638,6 +638,7 @@ impl system::offchain::CreateTransaction<Runtime, UncheckedExtrinsic> for Runtim
 }
 
 parameter_types! {
+	pub const Mining_Maximum: Count = 10;
 	pub const BTCLimitCount: Count = 100;
 	pub const ETHLimitCount: Count = 200;
 	pub const EOSLimitCount: Count = 1000;
@@ -686,7 +687,10 @@ parameter_types! {
 	pub const SenderWorkforceProportion: Permill = Permill::from_percent(50);		// SR
 	pub const ReceiverWorkforceProportion: Permill = Permill::from_percent(50);		// RR
 	pub const SuperiorShareRatio: Permill = Permill::from_percent(50);				// SSR
-	pub const OnsuperiorShareRatio: Permill = Permill::from_percent(25);			// OSR
+	pub const OnsuperiorShareRatio: Permill = Permill::from_percent(25);
+	pub const SuperiorShareRatio1: Percent_U64 = 50;
+	pub const OnsuperiorShareRatio1: Percent_U64 = 25;
+
 	pub const DailyMinimumReward: Balance = 1000 * DOLLARS;							// MR
 	pub const MinerSharefeeRatio: Permill = Permill::from_percent(50);				// MSR
 	pub const PledgeAmount: Balance = 500 * DOLLARS;
@@ -758,6 +762,11 @@ parameter_types! {
 	pub const TranRuntime: Runtime = Runtime;
 	// 将算力汇总信息归档到链上并不再修改
 	pub const ArchiveDuration: BlockNumber = 1 * DAYS;
+	pub const RemovePersonRecordDuration: BlockNumber = 30*DAYS;
+
+	// 挖矿奖励金额
+	pub const FirstYearPerDayMineRewardToken: Balance = 2100_0000*DOLLARS/2/4/36525*100; // 这里一年直接用365.25天来算
+
 }
 
 impl mine::Trait for Runtime {
@@ -765,6 +774,22 @@ impl mine::Trait for Runtime {
 	type MineIndex = u64;
 	//type TranRuntime = Runtime;
 	type ArchiveDuration = ArchiveDuration;
+	type RemovePersonRecordDuration = RemovePersonRecordDuration;
+
+	type FirstYearPerDayMineRewardToken = FirstYearPerDayMineRewardToken;
+
+	type BTCLimitCount = BTCLimitCount;
+	type BTCLimitAmount =  BTCLimitAmount;
+
+	type Mining_Maximum = Mining_Maximum;
+	type BTCMaxPortion = BTCMaxPortion;
+	type ETHMaxPortion = ETHMaxPortion;
+	type EOSMaxPortion = EOSMaxPortion;
+	type USDTMaxPortion = USDTMaxPortion;
+
+	type SuperiorShareRatio = SuperiorShareRatio1;
+	type OnsuperiorShareRatio = OnsuperiorShareRatio1;
+
 }
 
 

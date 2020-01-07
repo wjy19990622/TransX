@@ -14,8 +14,8 @@ use crate::report;
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct MinerInfo<A, M> {
 	hardware_id: Vec<u8>,
-	father_address: Option<A>,
-	grandpa_address: Option<A>,
+	pub father_address: Option<A>,
+	pub grandpa_address: Option<A>,
 	register_time: M,
 	machine_state: Vec<u8>,  // 暂时用字符串表示
 	machine_owner: A,
