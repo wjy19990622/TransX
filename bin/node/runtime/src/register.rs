@@ -87,10 +87,10 @@ decl_module! {
 				machine_owner: who.clone(),
 			};
 
-			if who.clone() != father_Address.clone(){
+			if who.clone() != father_Address.clone() && <AllMiners<T>>::exists(father_Address.clone()){
 				minerinfo.father_address = Some(father_Address.clone());
 			}
-			// 上级不能是自己  默认一定要填一个  填自己的话就返回none
+			// 上级不能是自己  默认一定要填一个  填自己的话就返回none 如果填的那个人没有注册矿机 则返回上级是None
 
 			if <AllMiners<T>>::exists(father_Address.clone()){
 				let tmpt =  <AllMiners<T>>::get(father_Address.clone()).father_address.unwrap_or(who.clone());
