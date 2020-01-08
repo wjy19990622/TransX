@@ -67,7 +67,7 @@ mod mine_linked;
 mod mine_power;
 
 //mod offchain_pricefetch;
-//mod expanded3;
+//mod expanded;
 pub mod price_fetch;
 
 use impls::{CurrencyToVoteHandler, Author, LinearWeightToFee, TargetedFeeAdjustment};
@@ -638,7 +638,7 @@ impl system::offchain::CreateTransaction<Runtime, UncheckedExtrinsic> for Runtim
 }
 
 parameter_types! {
-	pub const Mining_Maximum: Count = 10;
+	pub const MiningMaximum: Count = 10;
 	pub const BTCLimitCount: Count = 100;
 	pub const ETHLimitCount: Count = 200;
 	pub const EOSLimitCount: Count = 1000;
@@ -781,7 +781,7 @@ impl mine::Trait for Runtime {
 	type BTCLimitCount = BTCLimitCount;
 	type BTCLimitAmount =  BTCLimitAmount;
 
-	type Mining_Maximum = Mining_Maximum;
+	type MiningMaximum = MiningMaximum;
 	type BTCMaxPortion = BTCMaxPortion;
 	type ETHMaxPortion = ETHMaxPortion;
 	type EOSMaxPortion = EOSMaxPortion;

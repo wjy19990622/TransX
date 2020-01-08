@@ -13,6 +13,7 @@ use node_primitives::{Count, USD, PercentU64};
 use rstd::{result};
 
 use rstd::prelude::*;
+use rstd::convert::TryInto;
 
 
 // 继承 register 模块,方便调用register里面的 store
@@ -29,7 +30,7 @@ pub trait Trait: balances::Trait + RegisterTrait{
 
 	type BTCLimitCount: Get<Count>;
 	type BTCLimitAmount: Get<USD>;
-	type Mining_Maximum: Get<Count>;
+	type MiningMaximum: Get<Count>;
 
 	type BTCMaxPortion: Get<Permill>;
 	type ETHMaxPortion: Get<Permill>;
@@ -45,6 +46,7 @@ pub trait Trait: balances::Trait + RegisterTrait{
 
 }
 
+type StdResult<T> = core::result::Result<T, &'static str>;
 type BalanceOf<T> = <T as balances::Trait>::Balance;
 
 type BlockNumberOf<T> = <T as system::Trait>::BlockNumber;  // u32
@@ -123,7 +125,7 @@ decl_module! {
         fn deposit_event() = default;
         const ArchiveDuration: T::BlockNumber = T::ArchiveDuration::get();
 
-        pub fn create_mine(origin,mine_tag: Mine_Tag, tx: Vec<u8>, address: Vec<u8>,to_address:Vec<u8>,symbol:Vec<u8>,amount:u64,protocol:Vec<u8>,decimal:u64,usdt_nums:u32,blockchain:Vec<u8>,memo:Vec<u8>) -> Result { // 创建挖矿
+        pub fn create_mine(origin,mine_tag: MineTag, tx: Vec<u8>, address: Vec<u8>,to_address:Vec<u8>,symbol:Vec<u8>,amount:u64,protocol:Vec<u8>,decimal:u64,usdt_nums:u32,blockchain:Vec<u8>,memo:Vec<u8>) -> Result { // 创建挖矿
         	// 传入参数: todo: 还是 amount/10.pow(decimal)
         	// {"action":"transfer","contract":"",  // 传入一定是 transfer
         	//  "tx":"eth_xxxxxxxx",      // 币名字 + "_" + "tx hash"  的 字节码.名字为小写
@@ -232,7 +234,7 @@ impl<T: Trait> Module<T> {
 		}
 
 		let owned_mineindex = <OwnedMineIndex<T>>::get(&(sender.clone(),now_day));
-		if owned_mineindex > T::Mining_Maximum::get(){  // todo: maximum 通过其他函数调用
+		if owned_mineindex > T::MiningMaximum::get(){  // todo: maximum 通过其他函数调用
 			return Err("your mining frequency exceeds the maximum frequency");
 		}
 		// 将挖矿记录进去
@@ -433,20 +435,20 @@ impl<T: Trait> Module<T> {
 		}
 
 
-	fn per_day_mine_reward_token() -> T::Balance{
+	fn per_day_mine_reward_token() -> Option<T::Balance>{
 		/// 计算每一天的挖矿奖励
 		let block_num = <system::Module<T>>::block_number(); // 获取区块的高度
 		let day_block_nums = <BlockNumberOf<T>>::from(BLOCK_NUMS);  // wjy 一天出多少块
-		let now  = (block_num / day_block_nums).into();
+		let now:u32  = (block_num / day_block_nums).try_into().ok()?.try_into().ok()?;
 
-		let e = (now/(36525*4/100)) as u32;  //一年365.25天来进行计算
+		let e = now/(36525*4/100);  //一年365.25天来进行计算
 		if e > 32{
-			<BalanceOf<T>>::from(0)  // 128年之后的挖矿奖励基本为0 所以这时候可以终止了 继续没必要
+			Some(<BalanceOf<T>>::from(0))  // 128年之后的挖矿奖励基本为0 所以这时候可以终止了 继续没必要
 		}
 		else{
-			let NUM = 2_u32.pow(e);  // 意味着e最大值是32  运行32*4 = 128年
-			let per_day_tokens = T::FirstYearPerDayMineRewardToken::get()/<BalanceOf<T>>::from(NUM); // 2的n次方怎么形容
-			per_day_tokens
+			let num = 2_u32.pow(e);  // 意味着e最大值是32  运行32*4 = 128年
+			let per_day_tokens = T::FirstYearPerDayMineRewardToken::get()/<BalanceOf<T>>::from(num); // 2的n次方怎么形容
+			Some(per_day_tokens)
 		}
 
 	}
