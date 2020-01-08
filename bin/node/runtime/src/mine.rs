@@ -143,7 +143,6 @@ decl_module! {
         	// 有两种挖矿方式  所以一比交易最多能够进行两次挖矿
         	ensure!(!(<OwnerMineRecord<T>>::exists(tx.clone())
         	&& (<OwnerMineRecord<T>>::get(tx.clone()).unwrap().mine_tag == mine_tag.clone()  ||  (<OwnerMineRecord<T>>::get(tx.clone()).unwrap().mine_count >= 2u16))), "tx already exists");
-        	// TODO 这里说明了一个挖矿tx只能一次被挖（哪里有数据期限呢）  这个数据要永久保存？？？？？？
 
 			// 该币的全网挖矿算力大于一定的比例  则不再挖矿
 			ensure!(!Self::is_token_power_more_than_portion(symbol.clone()), "this token is more than max portion today.");
@@ -153,7 +152,6 @@ decl_module! {
         	let PCbtc = now_tokenpowerinfo.btc_total_count;
         	let PAbtc =  now_tokenpowerinfo.btc_total_amount;
         	ensure!(!(T::BTCLimitCount::get() <= PCbtc || T::BTCLimitAmount::get() <= PAbtc), "btc count or amount allreadey enough.");
-
 
 			Self::remove_expire_record(sender.clone(), false);
 
@@ -172,7 +170,6 @@ decl_module! {
 					let mut all_tx = <MinerAllDaysTx<T>>::get(sender.clone(), now_day.clone());
 					all_tx.push(tx.clone());
 					<MinerAllDaysTx<T>>::insert(sender.clone(), now_day.clone(), all_tx.clone());
-
 				}
 				else{
 					<MinerAllDaysTx<T>>::insert(sender.clone(), now_day.clone(), vec![tx.clone()]);
@@ -355,10 +352,9 @@ impl<T: Trait> Module<T> {
 		let block_num = <system::Module<T>>::block_number(); // 获取区块的高度
 		let day_block_nums = <BlockNumberOf<T>>::from(BLOCK_NUMS);  // wjy 一天出多少块
 		let now = block_num / day_block_nums;
+
 		if <MinerDays<T>>::exists(&who) {
-			// 如果里面包含数据
 			let all_days = <MinerDays<T>>::get(&who);
-//			let mut all_new_days = all_days.clone();
 			if !all_days.is_empty() {
 				// 如果是删除全部（提供给外部模块， 这个模块不使用）
 				if is_remove_all{
@@ -387,17 +383,19 @@ impl<T: Trait> Module<T> {
 			for tx in all_tx.iter() {
 				<OwnerMineRecord<T>>::remove(tx.clone());  // tx不能直接用remove方法来删除？？？？？？？？
 			}
-			// 把过期的交易清除
 		}
+
 		<MinerAllDaysTx<T>>::remove(who.clone(), day.clone());
+
 		if let Some(pos) = all_days.iter().position(|a| a == &day) {
 			all_days.swap_remove(pos);
+
 			// 更新本人的未删除记录
 			<MinerDays<T>>::insert(who.clone(), all_days.clone())
 		}
 	}
 
-	fn is_token_power_more_than_portion(symbol: Vec<u8>) -> bool{  //
+	fn is_token_power_more_than_portion(symbol: Vec<u8>) -> bool{
 		/// 判断该token在全网算力是否超额
 		// 小写传进来
 
@@ -472,12 +470,9 @@ impl<T: Trait> Module<T> {
 		if let Some(grandpa_address) = <AllMiners<T>>::get(who.clone()).grandpa_address{
 			grandpa = T::SuperiorShareRatio::get();
 		};
-		let flate_power = mine_power + mine_power*father/100 + mine_power*grandpa/100;
-		flate_power
+		let inflate_power = mine_power + mine_power*father/100 + mine_power*grandpa/100;
+		inflate_power
 	}
-
-
-
 }
 
 

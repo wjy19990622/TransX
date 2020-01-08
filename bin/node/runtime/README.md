@@ -37,6 +37,9 @@
     "sym": "Vec<u8>",
     "errinfo": "Vec<u8>"
   },
-  "PriceFailedOf": "PriceFailed"
+  "PriceFailedOf": "PriceFailed",
+  
+  
 }
+
 ```
