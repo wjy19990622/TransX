@@ -13,7 +13,7 @@ pub const BLOCK_NUMS: u32 = DAY_SECONDS/BLOCK_TIME;
 #[cfg_attr(feature = "std", derive(Debug, PartialEq, Eq))]
 #[derive(Encode, Decode, Clone)]
 pub struct MineParm {
-	pub mine_tag: Mine_Tag,
+	pub mine_tag: MineTag,
 	pub mine_count: u16,
     pub action:Vec<u8>,
     pub tx:Vec<u8>,
@@ -100,7 +100,7 @@ impl<Storage, Key,BlockNumber> PersonMine<Storage, Key,BlockNumber> where
 }
 #[cfg_attr(feature = "std", derive())]
 #[derive(Encode, Decode, Clone, Debug, PartialEq, Eq)]
-pub enum Mine_Tag {  // TODO HAHAHA
+pub enum MineTag {  // TODO HAHAHA
 	CLIENT,  // 收款客户端
 	WALLET,  // 钱包
 }
@@ -113,7 +113,7 @@ pub enum Mine_Tag {  // TODO HAHAHA
 pub struct PersonMineRecord<Moment,BlockNumber,Balance,AccountId>{
 
 
-	pub mine_tag: Mine_Tag, // 本次交易的挖矿标记
+	pub mine_tag: MineTag, // 本次交易的挖矿标记
 	pub mine_count: u16, // 这一比交易的挖矿次数
     timestamp:Moment,         // 挖矿时间
     blocknum:BlockNumber,

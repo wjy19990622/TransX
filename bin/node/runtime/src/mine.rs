@@ -5,11 +5,11 @@ use system::{ensure_signed};
 use sp_runtime::traits::{Hash,SimpleArithmetic, Bounded, One, Member,CheckedAdd, Zero};
 use sp_runtime::{Permill};
 use codec::{Encode, Decode};
-use crate::mine_linked::{PersonMineWorkForce,PersonMine,MineParm,PersonMineRecord,BLOCK_NUMS, Mine_Tag};
+use crate::mine_linked::{PersonMineWorkForce,PersonMine,MineParm,PersonMineRecord,BLOCK_NUMS, MineTag};
 //use node_primitives::BlockNumber;
 use crate::register::{self,MinersCount,AllMiners,Trait as RegisterTrait};
 use crate::mine_power::{PowerInfo, MinerPowerInfo, TokenPowerInfo, PowerInfoStore, MinerPowerInfoStore, TokenPowerInfoStore};
-use node_primitives::{Count, USD, Percent_U64};
+use node_primitives::{Count, USD, PermilllChangeIntoU64};
 use rstd::{result};
 
 use rstd::prelude::*;
@@ -29,15 +29,15 @@ pub trait Trait: balances::Trait + RegisterTrait{
 
 	type BTCLimitCount: Get<Count>;
 	type BTCLimitAmount: Get<USD>;
-	type Mining_Maximum: Get<Count>;
+	type MiningMaximum: Get<Count>;
 
 	type BTCMaxPortion: Get<Permill>;
 	type ETHMaxPortion: Get<Permill>;
 	type EOSMaxPortion: Get<Permill>;
 	type USDTMaxPortion: Get<Permill>;
 
-	type SuperiorShareRatio: Get<Percent_U64>;
-	type OnsuperiorShareRatio: Get<Percent_U64>;
+	type SuperiorShareRatio: Get<PermilllChangeIntoU64>;
+	type OnsuperiorShareRatio: Get<PermilllChangeIntoU64>;
 
 
 
@@ -111,7 +111,7 @@ decl_storage! {
         MinerPowerInfoPrevPoint: u32;
 
 		// id与交易天数的映射
-		MinerDAYS get(fn minertxdays): map T::AccountId => Vec<T::BlockNumber>;
+		MinerDays get(fn minertxdays): map T::AccountId => Vec<T::BlockNumber>;
 
 		// 个人所有天数的交易hash（未清除）
 		MinerAllDaysTx get(fn mineralldaystx): double_map hasher(twox_64_concat) T::AccountId, blake2_256(T::BlockNumber) => Vec<Vec<u8>>;
@@ -123,7 +123,7 @@ decl_module! {
         fn deposit_event() = default;
         const ArchiveDuration: T::BlockNumber = T::ArchiveDuration::get();
 
-        pub fn create_mine(origin,mine_tag: Mine_Tag, tx: Vec<u8>, address: Vec<u8>,to_address:Vec<u8>,symbol:Vec<u8>,amount:u64,protocol:Vec<u8>,decimal:u64,usdt_nums:u32,blockchain:Vec<u8>,memo:Vec<u8>) -> Result { // 创建挖矿
+        pub fn create_mine(origin,mine_tag: MineTag, tx: Vec<u8>, address: Vec<u8>,to_address:Vec<u8>,symbol:Vec<u8>,amount:u64,protocol:Vec<u8>,decimal:u64,usdt_nums:u32,blockchain:Vec<u8>,memo:Vec<u8>) -> Result { // 创建挖矿
         	// 传入参数: todo: 还是 amount/10.pow(decimal)
         	// {"action":"transfer","contract":"",  // 传入一定是 transfer
         	//  "tx":"eth_xxxxxxxx",      // 币名字 + "_" + "tx hash"  的 字节码.名字为小写
@@ -179,10 +179,10 @@ decl_module! {
 				}
 
 				// 获取本人的所有有记录的天数
-				let all_days = <MinerDAYS<T>>::get(sender.clone());
+				let all_days = <MinerDays<T>>::get(sender.clone());
 				if all_days.is_empty(){
 					let days = vec![now_day];
-					<MinerDAYS<T>>::insert(sender.clone(), days);
+					<MinerDays<T>>::insert(sender.clone(), days);
 				}
 				else{
 					if !all_days.contains(&now_day){
@@ -190,8 +190,8 @@ decl_module! {
 						let mut days = all_days.clone();
 						days.push(now_day);
 						// 先删除再增加
-						<MinerDAYS<T>>::remove(sender.clone());
-						<MinerDAYS<T>>::insert(sender.clone(), days);
+						<MinerDays<T>>::remove(sender.clone());
+						<MinerDays<T>>::insert(sender.clone(), days);
 					}
 				}
         	}
@@ -243,7 +243,7 @@ impl<T: Trait> Module<T> {
 		}
 
 		let owned_mineindex = <OwnedMineIndex<T>>::get(&(sender.clone(),now_day));
-		if owned_mineindex > T::Mining_Maximum::get(){  // todo: maximum 通过其他函数调用
+		if owned_mineindex > T::MiningMaximum::get(){  // todo: maximum 通过其他函数调用
 			return Err("your mining frequency exceeds the maximum frequency");
 		}
 		// 将挖矿记录进去
@@ -355,9 +355,9 @@ impl<T: Trait> Module<T> {
 		let block_num = <system::Module<T>>::block_number(); // 获取区块的高度
 		let day_block_nums = <BlockNumberOf<T>>::from(BLOCK_NUMS);  // wjy 一天出多少块
 		let now = block_num / day_block_nums;
-		if <MinerDAYS<T>>::exists(&who) {
+		if <MinerDays<T>>::exists(&who) {
 			// 如果里面包含数据
-			let all_days = <MinerDAYS<T>>::get(&who);
+			let all_days = <MinerDays<T>>::get(&who);
 //			let mut all_new_days = all_days.clone();
 			if !all_days.is_empty() {
 				// 如果是删除全部（提供给外部模块， 这个模块不使用）
@@ -380,7 +380,7 @@ impl<T: Trait> Module<T> {
 
 	// 删除被选中的那天的记录
 	fn remove_per_day_record(day: T::BlockNumber, who: T::AccountId) {
-		let mut all_days = <MinerDAYS<T>>::get(&who);
+		let mut all_days = <MinerDays<T>>::get(&who);
 		let all_tx = <MinerAllDaysTx<T>>::get(who.clone(), day.clone());
 		//如果当天交易存在 那么就删除掉
 		if !all_tx.is_empty() {
@@ -393,7 +393,7 @@ impl<T: Trait> Module<T> {
 		if let Some(pos) = all_days.iter().position(|a| a == &day) {
 			all_days.swap_remove(pos);
 			// 更新本人的未删除记录
-			<MinerDAYS<T>>::insert(who.clone(), all_days.clone())
+			<MinerDays<T>>::insert(who.clone(), all_days.clone())
 		}
 	}
 
