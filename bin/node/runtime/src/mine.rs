@@ -167,6 +167,17 @@ decl_module! {
 				 // 获取区块的高度
 				let day_block_nums = <BlockNumberOf<T>>::from(BLOCK_NUMS);  // wjy 一天出多少块
 				let now_day = block_num/day_block_nums;
+
+				if <MinerAllDaysTx<T>>::exists(sender.clone(), now_day.clone()){
+					let mut all_tx = <MinerAllDaysTx<T>>::get(sender.clone(), now_day.clone());
+					all_tx.push(tx.clone());
+					<MinerAllDaysTx<T>>::insert(sender.clone(), now_day.clone(), all_tx.clone());
+
+				}
+				else{
+					<MinerAllDaysTx<T>>::insert(sender.clone(), now_day.clone(), vec![tx.clone()]);
+				}
+
 				// 获取本人的所有有记录的天数
 				let all_days = <MinerDAYS<T>>::get(sender.clone());
 				if all_days.is_empty(){
