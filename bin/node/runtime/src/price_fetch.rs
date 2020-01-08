@@ -95,7 +95,7 @@ pub mod crypto {
         }
 
 
-        impl IdentifyAccount for Public {
+        impl IdentifyAccount for Public {  // 无用
             type AccountId = AccountId;
             fn into_account(self) -> AccountId {
                 let s: sr25519::Public = self.into();
