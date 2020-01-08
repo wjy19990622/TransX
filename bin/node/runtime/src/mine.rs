@@ -5,11 +5,11 @@ use system::{ensure_signed};
 use sp_runtime::traits::{Hash,SimpleArithmetic, Bounded, One, Member,CheckedAdd, Zero};
 use sp_runtime::{Permill};
 use codec::{Encode, Decode};
-use crate::mine_linked::{PersonMineWorkForce, PersonMine, MineParm, PersonMineRecord, BLOCK_NUMS, MineTag};
+use crate::mine_linked::{PersonMineWorkForce,PersonMine,MineParm,PersonMineRecord,BLOCK_NUMS, MineTag};
 //use node_primitives::BlockNumber;
 use crate::register::{self,MinersCount,AllMiners,Trait as RegisterTrait};
 use crate::mine_power::{PowerInfo, MinerPowerInfo, TokenPowerInfo, PowerInfoStore, MinerPowerInfoStore, TokenPowerInfoStore};
-use node_primitives::{Count, USD, PercentU64};
+use node_primitives::{Count, USD, PermilllChangeIntoU64, Duration};
 use rstd::{result};
 
 use rstd::prelude::*;
@@ -37,12 +37,10 @@ pub trait Trait: balances::Trait + RegisterTrait{
 	type EOSMaxPortion: Get<Permill>;
 	type USDTMaxPortion: Get<Permill>;
 
-	type SuperiorShareRatio: Get<PercentU64>;
-	type OnsuperiorShareRatio: Get<PercentU64>;
+	type SuperiorShareRatio: Get<PermilllChangeIntoU64>;
+	type OnsuperiorShareRatio: Get<PermilllChangeIntoU64>;
 
-
-
-
+	type SubHalfDuration: Get<Duration>;  // 减半周期
 
 }
 
@@ -113,7 +111,7 @@ decl_storage! {
         MinerPowerInfoPrevPoint: u32;
 
 		// id与交易天数的映射
-		MinerDAYS get(fn minertxdays): map T::AccountId => Vec<T::BlockNumber>;
+		MinerDays get(fn minertxdays): map T::AccountId => Vec<T::BlockNumber>;
 
 		// 个人所有天数的交易hash（未清除）
 		MinerAllDaysTx get(fn mineralldaystx): double_map hasher(twox_64_concat) T::AccountId, blake2_256(T::BlockNumber) => Vec<Vec<u8>>;
@@ -145,7 +143,6 @@ decl_module! {
         	// 有两种挖矿方式  所以一比交易最多能够进行两次挖矿
         	ensure!(!(<OwnerMineRecord<T>>::exists(tx.clone())
         	&& (<OwnerMineRecord<T>>::get(tx.clone()).unwrap().mine_tag == mine_tag.clone()  ||  (<OwnerMineRecord<T>>::get(tx.clone()).unwrap().mine_count >= 2u16))), "tx already exists");
-        	// TODO 这里说明了一个挖矿tx只能一次被挖（哪里有数据期限呢）  这个数据要永久保存？？？？？？
 
 			// 该币的全网挖矿算力大于一定的比例  则不再挖矿
 			ensure!(!Self::is_token_power_more_than_portion(symbol.clone()), "this token is more than max portion today.");
@@ -155,7 +152,6 @@ decl_module! {
         	let PCbtc = now_tokenpowerinfo.btc_total_count;
         	let PAbtc =  now_tokenpowerinfo.btc_total_amount;
         	ensure!(!(T::BTCLimitCount::get() <= PCbtc || T::BTCLimitAmount::get() <= PAbtc), "btc count or amount allreadey enough.");
-
 
 			Self::remove_expire_record(sender.clone(), false);
 
@@ -169,11 +165,21 @@ decl_module! {
 				 // 获取区块的高度
 				let day_block_nums = <BlockNumberOf<T>>::from(BLOCK_NUMS);  // wjy 一天出多少块
 				let now_day = block_num/day_block_nums;
+
+				if <MinerAllDaysTx<T>>::exists(sender.clone(), now_day.clone()){
+					let mut all_tx = <MinerAllDaysTx<T>>::get(sender.clone(), now_day.clone());
+					all_tx.push(tx.clone());
+					<MinerAllDaysTx<T>>::insert(sender.clone(), now_day.clone(), all_tx.clone());
+				}
+				else{
+					<MinerAllDaysTx<T>>::insert(sender.clone(), now_day.clone(), vec![tx.clone()]);
+				}
+
 				// 获取本人的所有有记录的天数
-				let all_days = <MinerDAYS<T>>::get(sender.clone());
+				let all_days = <MinerDays<T>>::get(sender.clone());
 				if all_days.is_empty(){
 					let days = vec![now_day];
-					<MinerDAYS<T>>::insert(sender.clone(), days);
+					<MinerDays<T>>::insert(sender.clone(), days);
 				}
 				else{
 					if !all_days.contains(&now_day){
@@ -181,8 +187,8 @@ decl_module! {
 						let mut days = all_days.clone();
 						days.push(now_day);
 						// 先删除再增加
-						<MinerDAYS<T>>::remove(sender.clone());
-						<MinerDAYS<T>>::insert(sender.clone(), days);
+						<MinerDays<T>>::remove(sender.clone());
+						<MinerDays<T>>::insert(sender.clone(), days);
 					}
 				}
         	}
@@ -238,7 +244,15 @@ impl<T: Trait> Module<T> {
 			return Err("your mining frequency exceeds the maximum frequency");
 		}
 		// 将挖矿记录进去
+		// TODO 这里有可能有错误  两次插入数据是同一个key
+
 		let person_mine_record = PersonMineRecord::new(&mine_parm, sender.clone(),now_time, block_num, balance2)?;
+
+		// 先删除再添加
+		if <OwnerMineRecord<T>>::exists(&mine_parm.tx){
+			<OwnerMineRecord<T>>::remove(&mine_parm.tx)
+		}
+
 		<OwnerMineRecord<T>>::insert(&mine_parm.tx,person_mine_record);
 		<OwnerWorkForceItem<T>>::add(&sender,mine_parm.usdt_nums,now_day,block_num)?;
 		// 将用户的挖矿记录+1
@@ -346,10 +360,9 @@ impl<T: Trait> Module<T> {
 		let block_num = <system::Module<T>>::block_number(); // 获取区块的高度
 		let day_block_nums = <BlockNumberOf<T>>::from(BLOCK_NUMS);  // wjy 一天出多少块
 		let now = block_num / day_block_nums;
-		if <MinerDAYS<T>>::exists(&who) {
-			// 如果里面包含数据
-			let all_days = <MinerDAYS<T>>::get(&who);
-//			let mut all_new_days = all_days.clone();
+
+		if <MinerDays<T>>::exists(&who) {
+			let all_days = <MinerDays<T>>::get(&who);
 			if !all_days.is_empty() {
 				// 如果是删除全部（提供给外部模块， 这个模块不使用）
 				if is_remove_all{
@@ -371,24 +384,26 @@ impl<T: Trait> Module<T> {
 
 	// 删除被选中的那天的记录
 	fn remove_per_day_record(day: T::BlockNumber, who: T::AccountId) {
-		let mut all_days = <MinerDAYS<T>>::get(&who);
+		let mut all_days = <MinerDays<T>>::get(&who);
 		let all_tx = <MinerAllDaysTx<T>>::get(who.clone(), day.clone());
 		//如果当天交易存在 那么就删除掉
 		if !all_tx.is_empty() {
 			for tx in all_tx.iter() {
 				<OwnerMineRecord<T>>::remove(tx.clone());  // tx不能直接用remove方法来删除？？？？？？？？
 			}
-			// 把过期的交易清除
 		}
+
 		<MinerAllDaysTx<T>>::remove(who.clone(), day.clone());
+
 		if let Some(pos) = all_days.iter().position(|a| a == &day) {
 			all_days.swap_remove(pos);
+
 			// 更新本人的未删除记录
-			<MinerDAYS<T>>::insert(who.clone(), all_days.clone())
+			<MinerDays<T>>::insert(who.clone(), all_days.clone())
 		}
 	}
 
-	fn is_token_power_more_than_portion(symbol: Vec<u8>) -> bool{  //
+	fn is_token_power_more_than_portion(symbol: Vec<u8>) -> bool{
 		/// 判断该token在全网算力是否超额
 		// 小写传进来
 
@@ -439,9 +454,9 @@ impl<T: Trait> Module<T> {
 		/// 计算每一天的挖矿奖励
 		let block_num = <system::Module<T>>::block_number(); // 获取区块的高度
 		let day_block_nums = <BlockNumberOf<T>>::from(BLOCK_NUMS);  // wjy 一天出多少块
-		let now:u32  = (block_num / day_block_nums).try_into().ok()?.try_into().ok()?;
+		let now:u64  = (block_num / day_block_nums).try_into().ok()?.try_into().ok()?;
 
-		let e = now/(36525*4/100);  //一年365.25天来进行计算
+		let e = (now/(36525*T::SubHalfDuration::get()/100)) as u32;  //一年365.25天来进行计算
 		if e > 32{
 			Some(<BalanceOf<T>>::from(0))  // 128年之后的挖矿奖励基本为0 所以这时候可以终止了 继续没必要
 		}
@@ -463,12 +478,9 @@ impl<T: Trait> Module<T> {
 		if let Some(grandpa_address) = <AllMiners<T>>::get(who.clone()).grandpa_address{
 			grandpa = T::SuperiorShareRatio::get();
 		};
-		let flate_power = mine_power + mine_power*father/100 + mine_power*grandpa/100;
-		flate_power
+		let inflate_power = mine_power + mine_power*father/100 + mine_power*grandpa/100;
+		inflate_power
 	}
-
-
-
 }
 
 

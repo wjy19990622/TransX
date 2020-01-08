@@ -27,7 +27,7 @@ use support::{
 	traits::{SplitTwoWays, Currency, Randomness},
 };
 use primitives::u32_trait::{_1, _2, _3, _4};
-use node_primitives::{AccountId, AccountIndex, Balance, BlockNumber, Hash, Index, Moment, Signature, Count, USD, Workforce, PercentU64};
+use node_primitives::{AccountId, AccountIndex, Balance, BlockNumber, Hash, Index, Moment, Signature, Count, USD, Workforce, PermilllChangeIntoU64, Duration};
 use sp_api::impl_runtime_apis;
 use sp_runtime::{Permill, Perbill, ApplyExtrinsicResult, impl_opaque_keys, generic, create_runtime_str};
 use sp_runtime::curve::PiecewiseLinear;
@@ -638,6 +638,7 @@ impl system::offchain::CreateTransaction<Runtime, UncheckedExtrinsic> for Runtim
 }
 
 parameter_types! {
+	pub const SubHalfDuration:Duration = 4; // 四年减半
 	pub const MiningMaximum: Count = 10;
 	pub const BTCLimitCount: Count = 100;
 	pub const ETHLimitCount: Count = 200;
@@ -688,8 +689,8 @@ parameter_types! {
 	pub const ReceiverWorkforceProportion: Permill = Permill::from_percent(50);		// RR
 	pub const SuperiorShareRatio: Permill = Permill::from_percent(50);				// SSR
 	pub const OnsuperiorShareRatio: Permill = Permill::from_percent(25);
-	pub const SuperiorShareRatio1: PercentU64 = 50;
-	pub const OnsuperiorShareRatio1: PercentU64 = 25;
+	pub const SuperiorShareRatio1: PermilllChangeIntoU64 = 50;
+	pub const OnsuperiorShareRatio1: PermilllChangeIntoU64 = 25;
 
 	pub const DailyMinimumReward: Balance = 1000 * DOLLARS;							// MR
 	pub const MinerSharefeeRatio: Permill = Permill::from_percent(50);				// MSR
@@ -789,6 +790,8 @@ impl mine::Trait for Runtime {
 
 	type SuperiorShareRatio = SuperiorShareRatio1;
 	type OnsuperiorShareRatio = OnsuperiorShareRatio1;
+
+	type  SubHalfDuration = SubHalfDuration; // 减半周期
 
 }
 
