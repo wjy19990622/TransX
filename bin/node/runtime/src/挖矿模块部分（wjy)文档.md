@@ -31,9 +31,9 @@
    计算该日期的挖矿奖励
    
    12. fn inflate_power(who: T::AccountId, mine_power: u64) -> u64  
-   计算膨胀算力 目前没这个需要大改 数据类型不对
+   计算膨胀算力 目前这个需要大改 数据类型不对
    
-   13. 删除掉原来的fn mining_maximum()-> u64， Mining_Maximum在lib文集爱你中获取
+   13. 删除掉原来的fn mining_maximum()-> u64， Mining_Maximum在lib文件中获取
    
 # 二、mine_linked.rs
 
