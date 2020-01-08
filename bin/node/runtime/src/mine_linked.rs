@@ -11,8 +11,10 @@ pub const BLOCK_NUMS: u32 = DAY_SECONDS/BLOCK_TIME;
 
 
 #[cfg_attr(feature = "std", derive(Debug, PartialEq, Eq))]
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Clone)]
 pub struct MineParm {
+	pub mine_tag: Mine_Tag,
+	pub mine_count: u16,
     pub action:Vec<u8>,
     pub tx:Vec<u8>,
     pub address:Vec<u8>,
@@ -96,11 +98,23 @@ impl<Storage, Key,BlockNumber> PersonMine<Storage, Key,BlockNumber> where
         Ok(())
     }
 }
+#[cfg_attr(feature = "std", derive())]
+#[derive(Encode, Decode, Clone, Debug, PartialEq, Eq)]
+pub enum Mine_Tag {  // TODO HAHAHA
+	CLIENT,  // 收款客户端
+	WALLET,  // 钱包
+}
+// 挖矿的标记参数  用于确定是来自收款客户端还是 钱包
+
 
 // 个人算力 单次挖矿表, 不做存储
 #[cfg_attr(feature = "std", derive(Debug, PartialEq, Eq))]
 #[derive(Encode, Decode,Clone)]
 pub struct PersonMineRecord<Moment,BlockNumber,Balance,AccountId>{
+
+
+	pub mine_tag: Mine_Tag, // 本次交易的挖矿标记
+	pub mine_count: u16, // 这一比交易的挖矿次数
     timestamp:Moment,         // 挖矿时间
     blocknum:BlockNumber,
     miner_address:AccountId,   //矿工地址
@@ -130,6 +144,8 @@ impl <Moment,BlockNumber,Balance,AccountId>PersonMineRecord<Moment,BlockNumber,B
         let s = [1,2].to_vec();
 
         let res =  PersonMineRecord{
+			mine_tag: mine_parm.mine_tag.clone(),
+			mine_count: mine_parm.mine_count.clone(),
             timestamp:moment,
             blocknum: block_number,
             miner_address: sender,  // transx用户地址?

@@ -16,9 +16,9 @@ use crate::constants::time::DAYS;
 #[derive(Encode, Decode, Default, Clone, PartialEq)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct PowerInfo<BlockNumber> {
-    total_power: u64,                       // 24小时总算力
+    pub total_power: u64,                       // 24小时总算力
     pub(crate) total_count: u64,                           // 24小时总交易次数
-    total_amount: u64,                          // 24小时总金额（以USDT计）
+    pub total_amount: u64,                          // 24小时总金额（以USDT计）
     block_number: BlockNumber,                  // 区块高度
 }
 
@@ -96,21 +96,22 @@ impl<Storage, BlockNumber>PowerInfoStore<Storage, BlockNumber> where
 #[derive(Encode, Decode, Default, Clone, PartialEq)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct TokenPowerInfo<BlockNumber> {
-    btc_total_power: u64,         // 24小时BTC累计算力
+
+    pub btc_total_power: u64,         // 24小时BTC累计算力
     pub(crate) btc_total_count: u64,             // 24小时BTC累计交易次数
     pub(crate) btc_total_amount: u64,            // 24小时BTC累计交易金额，以USDT计算
 
-    eth_total_power: u64,         // 24小时ETH累计算力
-    eth_total_count: u64,             // 24小时ETH累计交易次数
-    eth_total_amount: u64,            // 24小时ETH累计交易金额，以USDT计算
+    pub eth_total_power: u64,         // 24小时ETH累计算力
+    pub eth_total_count: u64,             // 24小时ETH累计交易次数
+    pub eth_total_amount: u64,            // 24小时ETH累计交易金额，以USDT计算
 
-    eos_total_power: u64,         // 24小时EOS累计算力
-    eos_total_count: u64,             // 24小时EOS累计交易次数
-    eos_total_amount: u64,            // 24小时EOS累计交易金额，以USDT计算
+    pub eos_total_power: u64,         // 24小时EOS累计算力
+    pub eos_total_count: u64,             // 24小时EOS累计交易次数
+    pub eos_total_amount: u64,            // 24小时EOS累计交易金额，以USDT计算
 
-    usdt_total_power: u64,         // 24小时USDT累计算力
-    usdt_total_count: u64,             // 24小时USDT累计交易次数
-    usdt_total_amount: u64,            // 24小时USDT累计交易金额，以USDT计算
+    pub usdt_total_power: u64,         // 24小时USDT累计算力
+    pub usdt_total_count: u64,             // 24小时USDT累计交易次数
+    pub usdt_total_amount: u64,            // 24小时USDT累计交易金额，以USDT计算
 
     block_number: BlockNumber,        // 区块高度
 }
