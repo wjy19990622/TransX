@@ -47,7 +47,7 @@ pub type Moment = u64;
 /// Type used for workforce.
 pub type Workforce = Permill;
 
-pub type Percent_U64 = u64;
+pub type PercentU64 = u64;
 
 /// Type used for USD unit.
 pub type USD = u64;

@@ -5,11 +5,11 @@ use system::{ensure_signed};
 use sp_runtime::traits::{Hash,SimpleArithmetic, Bounded, One, Member,CheckedAdd, Zero};
 use sp_runtime::{Permill};
 use codec::{Encode, Decode};
-use crate::mine_linked::{PersonMineWorkForce,PersonMine,MineParm,PersonMineRecord,BLOCK_NUMS, Mine_Tag};
+use crate::mine_linked::{PersonMineWorkForce, PersonMine, MineParm, PersonMineRecord, BLOCK_NUMS, MineTag};
 //use node_primitives::BlockNumber;
 use crate::register::{self,MinersCount,AllMiners,Trait as RegisterTrait};
 use crate::mine_power::{PowerInfo, MinerPowerInfo, TokenPowerInfo, PowerInfoStore, MinerPowerInfoStore, TokenPowerInfoStore};
-use node_primitives::{Count, USD, Percent_U64};
+use node_primitives::{Count, USD, PercentU64};
 use rstd::{result};
 
 use rstd::prelude::*;
@@ -36,8 +36,8 @@ pub trait Trait: balances::Trait + RegisterTrait{
 	type EOSMaxPortion: Get<Permill>;
 	type USDTMaxPortion: Get<Permill>;
 
-	type SuperiorShareRatio: Get<Percent_U64>;
-	type OnsuperiorShareRatio: Get<Percent_U64>;
+	type SuperiorShareRatio: Get<PercentU64>;
+	type OnsuperiorShareRatio: Get<PercentU64>;
 
 
 
