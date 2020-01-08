@@ -9,7 +9,7 @@ use crate::mine_linked::{PersonMineWorkForce,PersonMine,MineParm,PersonMineRecor
 //use node_primitives::BlockNumber;
 use crate::register::{self,MinersCount,AllMiners,Trait as RegisterTrait};
 use crate::mine_power::{PowerInfo, MinerPowerInfo, TokenPowerInfo, PowerInfoStore, MinerPowerInfoStore, TokenPowerInfoStore};
-use node_primitives::{Count, USD, PermilllChangeIntoU64};
+use node_primitives::{Count, USD, PermilllChangeIntoU64, Duration};
 use rstd::{result};
 
 use rstd::prelude::*;
@@ -39,9 +39,7 @@ pub trait Trait: balances::Trait + RegisterTrait{
 	type SuperiorShareRatio: Get<PermilllChangeIntoU64>;
 	type OnsuperiorShareRatio: Get<PermilllChangeIntoU64>;
 
-
-
-
+	type SubHalfDuration: Get<Duration>;  // 减半周期
 
 }
 
@@ -456,12 +454,12 @@ impl<T: Trait> Module<T> {
 		let day_block_nums = <BlockNumberOf<T>>::from(BLOCK_NUMS);  // wjy 一天出多少块
 		let now  = (block_num / day_block_nums).into();
 
-		let e = (now/(36525*4/100)) as u32;  //一年365.25天来进行计算
+		let e = (now/(36525*T::SubHalfDuration::get()/100)) as u32;  //一年365.25天来进行计算
 		if e > 32{
-			<BalanceOf<T>>::from(0)  // 128年之后的挖矿奖励基本为0 所以这时候可以终止了 继续没必要
+			<BalanceOf<T>>::from(0)  // 32*T::SubHalfDuration::get()年之后的挖矿奖励基本为0 所以这时候可以终止了 继续没必要
 		}
 		else{
-			let NUM = 2_u32.pow(e);  // 意味着e最大值是32  运行32*4 = 128年
+			let NUM = 2_u32.pow(e);  // 意味着e最大值是32  运行32*T::SubHalfDuration::get()年
 			let per_day_tokens = T::FirstYearPerDayMineRewardToken::get()/<BalanceOf<T>>::from(NUM); // 2的n次方怎么形容
 			per_day_tokens
 		}
