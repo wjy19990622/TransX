@@ -244,7 +244,15 @@ impl<T: Trait> Module<T> {
 			return Err("your mining frequency exceeds the maximum frequency");
 		}
 		// 将挖矿记录进去
+		// TODO 这里有可能有错误  两次插入数据是同一个key
+
 		let person_mine_record = PersonMineRecord::new(&mine_parm, sender.clone(),now_time, block_num, balance2)?;
+
+		// 先删除再添加
+		if <OwnerMineRecord<T>>::exists(&mine_parm.tx){
+			<OwnerMineRecord<T>>::remove(&mine_parm.tx)
+		}
+
 		<OwnerMineRecord<T>>::insert(&mine_parm.tx,person_mine_record);
 		<OwnerWorkForceItem<T>>::add(&sender,mine_parm.usdt_nums,now_day,block_num)?;
 		// 将用户的挖矿记录+1
