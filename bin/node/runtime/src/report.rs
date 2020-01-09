@@ -1,5 +1,5 @@
 
-use support::{decl_module, decl_storage, decl_event, dispatch::Result, ensure, debug, StorageMap, StorageValue};
+use support::{decl_module, decl_storage, decl_event, dispatch::Result,weights::{SimpleDispatchInfo}, ensure, debug, StorageMap, StorageValue};
 use system::ensure_signed;
 use rstd::prelude::*;
 use collective;
@@ -130,6 +130,7 @@ decl_module! {
 
 		//------------------------------------------------------------------------------------------
 		// 举报
+		#[weight = SimpleDispatchInfo::FixedNormal(500_000)]
 		pub fn report(origin, symbol: Vec<u8>, tx: Vec<u8>, repoter: T::AccountId, reason: Vec<u8>,
 		illegalman: T::AccountId, tx_amount: T::Balance, usdt_amount: T::Balance, decimals: u32) -> Result{
 			let who = ensure_signed(origin)?;
@@ -181,6 +182,7 @@ decl_module! {
 
 		//------------------------------------------------------------------------------------------
 		// 取消举报
+		#[weight = SimpleDispatchInfo::FixedNormal(500_000)]
 		pub fn cancel_report(origin, tx_hash: T::Hash) -> Result{
 			/// 取消举报 只有该提案的举报者才有资格操作
 			let who = ensure_signed(origin)?;
@@ -219,6 +221,7 @@ decl_module! {
 
 		//-----------------------------------------------------------------------------------------
 		// 投票
+		#[weight = SimpleDispatchInfo::FixedNormal(500_000)]
 		pub fn vote(origin, tx_hash: T::Hash, yes_no: bool) -> Result{
 			/// 投票 只有议员可以操作
 

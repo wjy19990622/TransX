@@ -1,5 +1,5 @@
 use support::{debug,decl_storage, decl_module,decl_event, StorageValue, StorageMap,Parameter,
-			  dispatch::Result, Blake2_256, ensure,dispatch::Vec,traits::Currency, StorageDoubleMap};
+			  dispatch::Result, weights::{SimpleDispatchInfo},Blake2_256, ensure,dispatch::Vec,traits::Currency, StorageDoubleMap};
 use support::traits::{Get, ReservableCurrency};
 use system::{ensure_signed};
 use sp_runtime::traits::{Hash,SimpleArithmetic, Bounded, One, Member,CheckedAdd, Zero};
@@ -123,6 +123,7 @@ decl_module! {
         fn deposit_event() = default;
         const ArchiveDuration: T::BlockNumber = T::ArchiveDuration::get();
 
+		#[weight = SimpleDispatchInfo::FixedNormal(500_000)]
         pub fn create_mine(origin,mine_tag: MineTag, tx: Vec<u8>, address: Vec<u8>,to_address:Vec<u8>,symbol:Vec<u8>,amount:u64,protocol:Vec<u8>,decimal:u64,usdt_nums:u32,blockchain:Vec<u8>,memo:Vec<u8>) -> Result { // 创建挖矿
         	// 传入参数: todo: 还是 amount/10.pow(decimal)
         	// {"action":"transfer","contract":"",  // 传入一定是 transfer
