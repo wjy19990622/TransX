@@ -411,7 +411,7 @@ parameter_types! {
 	pub const ProposalBondMinimum: Balance = 1 * DOLLARS;
 //	pub const PledgeAmount: Balance = 5*DOLLARS;  // 自己添加的参数
 	pub const SpendPeriod: BlockNumber = 1 * DAYS;
-	pub const Burn: Permill = Permill::from_percent(50);
+	pub const Burn: Permill = Permill::from_percent(0);
 }
 
 impl treasury::Trait for Runtime {
