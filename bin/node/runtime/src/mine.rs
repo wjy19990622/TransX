@@ -230,10 +230,8 @@ impl<T: Trait> Module<T> {
 //		register::Call::<T>::add_token_info([1,2,3].to_vec(),[1,2,3].to_vec());
 		let block_num = <system::Module<T>>::block_number(); // 获取区块的高度
 		let day_block_nums = <BlockNumberOf<T>>::from(BLOCK_NUMS);
-		// let now_day = block_num.checked_div(&day_block_nums).ok_or("mining function: div causes error")?;
 		let now_day = block_num/day_block_nums;
 		let now_time = <timestamp::Module<T>>::get();   // 记录到秒
-		// test
 		let balance = <T::Balance>::from(12);  // todo test,最后需要获取balance,从哪儿来?
 		let balance1 = <T::Balance>::from(12);  // todo test
 		let balance2 = balance.checked_add(&balance1).ok_or("balance overflow")?;
@@ -246,10 +244,10 @@ impl<T: Trait> Module<T> {
 			return Err("your mining frequency exceeds the maximum frequency");
 		}
 		//--------------------------------------------------------------------------------------------
-		// todo 计算算力
-		// ***计算金额算力***
-		let enlarge_usdt_nums: u64 = mine_parm.usdt_nums.clone();  // 把金额放大100倍
-		// 计算总额度算力
+		// todo 算力模块
+		// ***计算金网算力***
+		let enlarge_usdt_nums: u64 = mine_parm.usdt_nums.clone();  // todo 把金额放大100倍  是考虑到算力精度
+		// 计算金额算力
 		let mut amount_workforce = Self::calculate_count_or_amount_workforce(&sender, block_num, mine_parm.symbol.clone(), enlarge_usdt_nums, true)?;
 		// 获取膨胀金额算力（真实算力）
 		amount_workforce = Self::inflate_power(sender.clone(), amount_workforce);
@@ -257,13 +255,13 @@ impl<T: Trait> Module<T> {
 		let mut count_workforce = Self::calculate_count_or_amount_workforce(&sender, block_num, mine_parm.symbol.clone(), 100 as u64, false)?;
 		// 获取膨胀后的次数算力（真实算力）
 		count_workforce = Self::inflate_power(sender.clone(), count_workforce);
+
 		// 获取昨天的总金额
 		let mut prev_total_amount = <PowerInfoStoreItem<T>>::get_prev_power(block_num.clone()).total_amount;
-
 		// 获取昨天的总次数
 		let mut prev_total_count = <PowerInfoStoreItem<T>>::get_prev_power(block_num.clone()).total_count;
-		// 计算总算力占比
 
+		// 计算总算力占比
 		let workforce_ratio = Self::caculate_workforce_ratio(amount_workforce.clone(), count_workforce.clone(), prev_total_amount.clone(), prev_total_count.clone());
 
 		// 计算奖励
@@ -279,18 +277,19 @@ impl<T: Trait> Module<T> {
 		let mut fenmu0 = <BalanceOf<T>>::from(1_0000_0000u32);
 		let mut fenmu1 = <BalanceOf<T>>::from(10u32);
 		let decimal = fenmu1*fenmu0;
+
 		// 把算力占比变成balance类型  这里赋值
 		match <BalanceOf<T>>::try_from(workforce_ratio as usize).ok(){
 			Some(b) => workforce_ratio_change_into_balance = b,
 			None => return Err("fenzi err")
 		}
+
 		// 计算当天奖励
 		let thistime_reward = today_reward * workforce_ratio_change_into_balance/decimal;
 		// 如果账户不存在 则不会进行存储那一步
 		T::Currency3::deposit_into_existing(&sender, thistime_reward)?;
 
 		// 全网算力存储
-
 		<PowerInfoStoreItem<T>>::add_power(workforce_ratio.clone(), 1u64, count_workforce.clone(), mine_parm.usdt_nums.clone(),
 		amount_workforce.clone(), block_num.clone());
 		// 全网token信息存储
@@ -301,11 +300,8 @@ impl<T: Trait> Module<T> {
 		<MinerPowerInfoStoreItem<T>>::add_miner_power(&sender, curr_point.clone(), mine_parm.symbol.clone(), workforce_ratio,
 		1u64, count_workforce, mine_parm.usdt_nums.clone(), amount_workforce, block_num);
 
-
 		//--------------------------------------------------------------------------------------------
 		// 将挖矿记录进去
-		// TODO 这里有可能有错误  两次插入数据是同一个key
-
 		let person_mine_record = PersonMineRecord::new(&mine_parm, sender.clone(),now_time, block_num, balance2)?;
 
 		// 先删除再添加
@@ -373,44 +369,43 @@ impl<T: Trait> Module<T> {
         let alpha = 0.3;
         let beta = 1.0 - alpha;
 
-	let mut work_power = 0 as u64;
+		let mut work_power = 0 as u64;
 
         if  coin_name == "btc".as_bytes().to_vec() {
+			let lc_btc = 100u64;
+			ensure!(miner_power_info.btc_count <= lc_btc, "BTC mining count runs out today");
 
-                let lc_btc = 100u64;
-                ensure!(miner_power_info.btc_count <= lc_btc, "BTC mining count runs out today");
-
-                // 计算矿机P一次BTC转账的频次算力PCW btc = α * 1 / TC / PPC btc ( PC btc < LC btc )
-                // 矿机P计算BTC频次算力钝化系数，PPC btc = ( (PC btc + 1 ) / AvC btc ) % 10
-				if is_amount_power{
-					//                let coin_amount = (coin_price * coin_number) as u64;
-					// PPA btc	矿机P计算BTC金额算力钝化系数	PPA btc = ( (Price(BTC) * m btc +PAbtc ) / AvA btc ) % 10
-					// todo 以下是计算金额算力
-					let mut pa = prev_miner_power_info.total_amount;
-					if pa < 10 {
-						pa = 1000;
-					}
-					let ava_btc = prev_token_power_info.btc_total_amount.checked_div(miner_numbers).ok_or("Calc AvA btc causes overflow")?;  // 平均每个区块多少钱
-					let ppa_btc_divisor = usdt_nums + prev_token_power_info.btc_total_amount;
-					let divisor = ppa_btc_divisor.checked_div(ava_btc).ok_or("Calc PPC btc parameter causes overflow")?;
-					let ppa_btc = divisor % 10;
-					let paw_btc = (beta * (usdt_nums as f64) * ppa_btc as f64 / pa as f64) as u64;
-					work_power = paw_btc;
-
+			// 计算矿机P一次BTC转账的频次算力PCW btc = α * 1 / TC / PPC btc ( PC btc < LC btc )
+			// 矿机P计算BTC频次算力钝化系数，PPC btc = ( (PC btc + 1 ) / AvC btc ) % 10
+			if is_amount_power{
+				//                let coin_amount = (coin_price * coin_number) as u64;
+				// PPA btc	矿机P计算BTC金额算力钝化系数	PPA btc = ( (Price(BTC) * m btc +PAbtc ) / AvA btc ) % 10
+				// todo 以下是计算金额算力
+				let mut pa = prev_miner_power_info.total_amount;
+				if pa < 10 {
+					pa = 1000;
 				}
-				else{
-					let avc_btc = prev_token_power_info.btc_total_count.checked_div(miner_numbers).ok_or("Calc AvC btc causes overflow")?;  // todo 平均一个区块产生多少btc
-					let ppc_btc_divisor = prev_miner_power_info.btc_count.checked_add(1).ok_or("Calc PPC btc divisor causes overflow")?;
-					let divisor = ppc_btc_divisor.checked_div(avc_btc).ok_or("Calc PPC btc parameter causes overflow")?;
-					let ppc_btc = divisor % 10;
+				let ava_btc = prev_token_power_info.btc_total_amount.checked_div(miner_numbers).ok_or("Calc AvA btc causes overflow")?;  // 平均每个区块多少钱
+				let ppa_btc_divisor = usdt_nums + prev_token_power_info.btc_total_amount;
+				let divisor = ppa_btc_divisor.checked_div(ava_btc).ok_or("Calc PPC btc parameter causes overflow")?;
+				let ppa_btc = divisor % 10;
+				let paw_btc = (beta * (usdt_nums as f64) * ppa_btc as f64 / pa as f64) as u64;
+				work_power = paw_btc;
 
-					let mut tc = prev_power_info.total_count;
-					if tc == 0 {
-						tc = 100;
-					}
-					let pcw_btc = (alpha * ppc_btc as f64 / tc as f64) as u64;
-					work_power = pcw_btc;
+			}
+			else{
+				let avc_btc = prev_token_power_info.btc_total_count.checked_div(miner_numbers).ok_or("Calc AvC btc causes overflow")?;  // todo 平均一个区块产生多少btc
+				let ppc_btc_divisor = prev_miner_power_info.btc_count.checked_add(1).ok_or("Calc PPC btc divisor causes overflow")?;
+				let divisor = ppc_btc_divisor.checked_div(avc_btc).ok_or("Calc PPC btc parameter causes overflow")?;
+				let ppc_btc = divisor % 10;
+
+				let mut tc = prev_power_info.total_count;
+				if tc == 0 {
+					tc = 100;
 				}
+				let pcw_btc = (alpha * ppc_btc as f64 / tc as f64) as u64;
+				work_power = pcw_btc;
+			}
 
 				return Ok(work_power); // todo 算力应该是个浮点数
 
@@ -423,8 +418,6 @@ impl<T: Trait> Module<T> {
 		Ok(10 as u64)
 	}
 
-	// todo 计算总算力占比   目前金额算力占比与次数算力占比是1：1关系  这个占比目前可以直接用u64
-	// todo 这个数取整  是为了避免浮点数的不准确性
 	fn caculate_workforce_ratio(amount_workforce: u64, count_workforce: u64, mut pre_amount_workfore: u64, mut pre_count_workforce: u64) -> u64{
 		let a_sr = 0.5;  // 金额算力占比
 		let c_sr= 1.0-a_sr;  // 次数算力占比
@@ -530,7 +523,7 @@ impl<T: Trait> Module<T> {
 						is_too_large = true;
 					}
 				}
-			}
+			}这里有问题的 应该把
 
 		is_too_large
 		}
@@ -554,7 +547,7 @@ impl<T: Trait> Module<T> {
 
 	}
 
-	// todo 这里有问题的 应该把把这个金额数值再放大到100倍  这样计算数值的时候才能最大限度的准确
+	// todo 把这个usdt金额数值再放大到100倍  这样计算数值的时候才能最大限度的准确
 	fn inflate_power(who: T::AccountId, mine_power: u64) -> u64{  // todo 膨胀算力在计算算力之后  把膨胀算力加入到累计算力里面
 		/// 计算膨胀算力
 		let mut grandpa = 0.0;
