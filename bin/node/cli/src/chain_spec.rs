@@ -22,7 +22,7 @@ use serde::{Serialize, Deserialize};
 use node_runtime::{
 	AuthorityDiscoveryConfig, BabeConfig, BalancesConfig, ContractsConfig, CouncilConfig, DemocracyConfig,
 	GrandpaConfig, ImOnlineConfig, IndicesConfig, SessionConfig, SessionKeys, StakerStatus, StakingConfig, SudoConfig,
-	SystemConfig, TechnicalCommitteeConfig, WASM_BINARY,
+	SystemConfig, TechnicalCommitteeConfig, MineConfig, WASM_BINARY,
 };
 use node_runtime::Block;
 use node_runtime::constants::currency::*;
@@ -222,9 +222,9 @@ pub fn testnet_genesis(
 		]
 	});
 
-	const ENDOWMENT: Balance = 1_000 * DOLLARS;
+	const ENDOWMENT: Balance = 1_0000 * DOLLARS;  //一个人10000token
 	const STASH: Balance = 100 * DOLLARS;
-
+	let FOUNDERS: Vec<AccountId> = vec![get_account_id_from_seed::<sr25519::Public>("Alice"),get_account_id_from_seed::<sr25519::Public>("Bob")].into();
 	GenesisConfig {
 		system: Some(SystemConfig {
 			code: WASM_BINARY.to_vec(),
@@ -301,6 +301,10 @@ pub fn testnet_genesis(
 		}),
 		membership_Instance1: Some(Default::default()),
 		treasury: Some(Default::default()),
+
+		mine: Some(MineConfig{
+			founders: FOUNDERS,
+		}),
 	}
 }
 

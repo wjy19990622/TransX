@@ -836,7 +836,7 @@ construct_runtime!(
 		Nicks: nicks::{Module, Call, Storage, Event<T>},
 		Transx: transx::{Module, Call, Storage, Event<T>},
 		Register: register::{Module, Call, Storage, Event<T>},
-		Mine: mine::{Module, Storage, Call, Event<T>},
+		Mine: mine::{Module, Storage, Call, Event<T>, Config<T>},
 		Report: report::{Module, Call, Storage, Event<T>},
 		//Workforce: workforce::{Module, Call, Storage, Event<T>},
 //		OffchainPricefetch: offchain_pricefetch::{Module, Call, Storage, Event<T>, ValidateUnsigned},

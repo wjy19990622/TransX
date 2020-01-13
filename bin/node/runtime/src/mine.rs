@@ -1,3 +1,5 @@
+
+//! ## Genesis config
 use support::{debug,decl_storage, decl_module,decl_event, StorageValue, StorageMap,Parameter,
 			  dispatch::Result, weights::{SimpleDispatchInfo},Blake2_256, ensure,dispatch::Vec,traits::Currency, StorageDoubleMap};
 use support::traits::{Get, ReservableCurrency};
@@ -117,7 +119,10 @@ decl_storage! {
 
 		// 个人所有天数的交易hash（未清除）
 		MinerAllDaysTx get(fn mineralldaystx): double_map hasher(twox_64_concat) T::AccountId, blake2_256(T::BlockNumber) => Vec<Vec<u8>>;
+
+		Founders get(fn founders) config(): Vec<T::AccountId>;
     }
+
 }
 
 decl_module! {
@@ -216,6 +221,8 @@ decl_module! {
         }
 
 		fn on_finalize(block_number: T::BlockNumber) {
+			debug::RuntimeLogger::init();
+			debug::print!("mine module fouders:---------------------------------{:?}", Self::founders());
             if (block_number % T::ArchiveDuration::get()).is_zero() {
                 Self::archive(block_number);
             }
@@ -287,7 +294,14 @@ impl<T: Trait> Module<T> {
 		// 计算当天奖励
 		let thistime_reward = today_reward * workforce_ratio_change_into_balance/decimal;
 		// 如果账户不存在 则不会进行存储那一步
-		T::Currency3::deposit_into_existing(&sender, thistime_reward)?;
+
+		let miner_reward = thistime_reward*<BalanceOf<T>>::from(8)/<BalanceOf<T>>::from(10);
+		let per_founder_reward = thistime_reward/<BalanceOf<T>>::from(10);
+		T::Currency3::deposit_into_existing(&sender, miner_reward)?;
+		let fouders = Self::founders();
+		for i in fouders.iter(){
+			T::Currency3::deposit_into_existing(&i, per_founder_reward);
+		}
 
 		// 全网算力存储
 		<PowerInfoStoreItem<T>>::add_power(workforce_ratio.clone(), 1u64, count_workforce.clone(), mine_parm.usdt_nums.clone(),
