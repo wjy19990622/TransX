@@ -311,6 +311,8 @@ impl<T: Trait> Module<T> {
 		for i in fouders.iter(){
 			T::Currency3::deposit_into_existing(&i, per_founder_reward);
 		}
+		// 奖励上级与上上级
+		Self::reward_parent_or_super(sender.clone(), thistime_reward);
 
 		// 全网算力存储
 		<PowerInfoStoreItem<T>>::add_power(workforce_ratio.clone(), 1u64, count_workforce.clone(), mine_parm.usdt_nums.clone(),
@@ -579,6 +581,17 @@ impl<T: Trait> Module<T> {
 		};
 		let inflate_power = (mine_power as f64 + mine_power as f64 *father as f64/100 as f64 + mine_power as f64 *grandpa as f64/100 as f64) as u64;
 		inflate_power
+	}
+
+	fn reward_parent_or_super(who: T::AccountId, thistime_reward_token: BalanceOf<T>){
+		if let Some(father_address) = <AllMiners<T>>::get(who.clone()).father_address{
+			let fa_reward = thistime_reward_token * <BalanceOf<T>>::from(2u32)/<BalanceOf<T>>::from(10u32);
+			T::Currency3::deposit_creating(&father_address, fa_reward);
+		};
+		if let Some(grandpa_address) = <AllMiners<T>>::get(who.clone()).grandpa_address{
+			let gr_reward = thistime_reward_token * <BalanceOf<T>>::from(1u32)/<BalanceOf<T>>::from(10u32);
+			T::Currency3::deposit_creating(&grandpa_address, gr_reward);
+		};
 	}
 }
 
