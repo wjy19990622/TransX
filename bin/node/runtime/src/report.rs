@@ -296,7 +296,9 @@ decl_module! {
 				// 如果作弊是真  把名字加入黑名单  并且从注册列表中删除  把该投票信息保存
 				if vote_result.1 == IsPunished::YES{
 					<BlackList<T>>::insert(illegalman.clone(), tx_hash.clone());
-					Self::kill_register(illegalman.clone());
+					Self::kill_register(illegalman.clone())?;
+					Self::deposit_event(RawEvent::KillRegisterEvent(illegalman.clone()));
+
 					// 永久保存该投票信息
 					<AllPunishmentInfo<T>>::insert(tx_hash.clone(), voting.clone());
 				}
@@ -335,6 +337,8 @@ decl_event!(
 
 		// 正在投谁的票
 		VoteEvent(AccountId),
+
+		KillRegisterEvent(AccountId),
 
 		// 谁的议案通过了
 		VoteFinishEvent(AccountId),
