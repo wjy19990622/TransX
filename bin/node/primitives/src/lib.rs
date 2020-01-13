@@ -47,7 +47,7 @@ pub type Moment = u64;
 /// Type used for workforce.
 pub type Workforce = Permill;
 
-pub type PermilllChangeIntoU64 = u64;  // 比例转变成u64  比如50%写成50
+pub type PermilllChangeIntoF64 = f64;  // 比例转变成u64  比如50%写成50
 
 pub type Duration = u64;  // 减半周期
 

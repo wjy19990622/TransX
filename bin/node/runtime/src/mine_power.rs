@@ -18,7 +18,11 @@ use crate::constants::time::DAYS;
 pub struct PowerInfo<BlockNumber> {
     pub total_power: u64,                       // 24小时总算力
     pub(crate) total_count: u64,                           // 24小时总交易次数
+	pub count_power: u64,
+
     pub total_amount: u64,                          // 24小时总金额（以USDT计）
+	pub amount_power: u64,
+
     block_number: BlockNumber,                  // 区块高度
 }
 
@@ -28,7 +32,7 @@ impl<Storage, BlockNumber>PowerInfoStore<Storage, BlockNumber> where
     Storage: StorageMap<u32, PowerInfo<BlockNumber>, Query = Option<PowerInfo<BlockNumber>>>,
 {
     fn new_power_info(block_number: BlockNumber) -> PowerInfo<BlockNumber> {
-        PowerInfo {total_power: 0u64, total_count: 0u64, total_amount: 0u64, block_number }
+        PowerInfo {total_power: 0u64, total_count: 0u64, count_power: 064, total_amount: 0u64, amount_power: 064, block_number }
     }
 
     // 获取编号为number的PowerInfo，number=1表示存储第一天的算力信息，当获取不到时，
@@ -43,7 +47,7 @@ impl<Storage, BlockNumber>PowerInfoStore<Storage, BlockNumber> where
 
     // 从本地存储中获取当前24小时内的算力信息
     pub(crate) fn get_curr_power(block_number: BlockNumber) -> PowerInfo<BlockNumber> {
-        let chain_run_days = block_number / BlockNumber::from(DAYS) + BlockNumber::from(1u32);
+        let chain_run_days = block_number.clone() / BlockNumber::from(DAYS) + BlockNumber::from(1u32);
         let number: u32 = chain_run_days.try_into().ok().unwrap();
 
         Self::read(number, block_number)
@@ -51,22 +55,24 @@ impl<Storage, BlockNumber>PowerInfoStore<Storage, BlockNumber> where
 
     // 从本地存储中获取前一天的算力信息
     pub(crate) fn get_prev_power(block_number: BlockNumber) -> PowerInfo<BlockNumber> {
-        let chain_run_days = block_number / BlockNumber::from(DAYS) + BlockNumber::from(1u32);
+        let chain_run_days = block_number.clone() / BlockNumber::from(DAYS) + BlockNumber::from(1u32);
         let number: u32 = chain_run_days.try_into().ok().unwrap();
 
         Self::read(number-1, block_number)
     }
 
     // 增加算力
-    pub(crate) fn add_power(add_power_value: u64, add_count: u64,
-                 add_amount: u64, block_number: BlockNumber) -> result::Result<PowerInfo<BlockNumber>, &'static str> {
-        let chain_run_days = block_number / BlockNumber::from(DAYS) + BlockNumber::from(1u32);
+    pub(crate) fn add_power(add_power_value: u64, add_count: u64, add_count_power: u64,
+                 add_amount: u64, add_amount_power: u64,  block_number: BlockNumber) -> result::Result<PowerInfo<BlockNumber>, &'static str> {
+        let chain_run_days = block_number.clone() / BlockNumber::from(DAYS) + BlockNumber::from(1u32);
         let number: u32 = chain_run_days.try_into().ok().unwrap();
-        let mut power_info = Self::read(number, block_number);
+        let mut power_info = Self::read(number, block_number.clone());
 
         power_info.total_power += add_power_value;
         power_info.total_count += add_count;
+		power_info.count_power += add_count_power;
         power_info.total_amount += add_amount;
+		power_info.amount_power += add_amount_power;
         power_info.block_number = block_number;
 
         Self::write(number, &power_info);
@@ -78,13 +84,14 @@ impl<Storage, BlockNumber>PowerInfoStore<Storage, BlockNumber> where
     pub(crate) fn archive(block_number: BlockNumber) -> result::Result<PowerInfo<BlockNumber>, &'static str> {
         let chain_run_days = block_number / BlockNumber::from(DAYS) + BlockNumber::from(1u32);
         let number: u32 = chain_run_days.try_into().ok().unwrap();
-        let mut archive_power_info = Self::read(number, block_number);
+        let mut archive_power_info = Self::read(number, block_number.clone());
 
-        archive_power_info.block_number = block_number;
+        archive_power_info.block_number = block_number.clone();
 
         Self::write(number, &archive_power_info);
 
-        let new_power_info = Self::new_power_info(block_number);
+		// todo 归档后初始化
+        let new_power_info = Self::new_power_info(block_number.clone());
         Self::write(number+1, &new_power_info);
 
         Ok(archive_power_info)
@@ -99,19 +106,27 @@ pub struct TokenPowerInfo<BlockNumber> {
 
     pub btc_total_power: u64,         // 24小时BTC累计算力
     pub(crate) btc_total_count: u64,             // 24小时BTC累计交易次数
+	pub btc_count_power: u64,
     pub(crate) btc_total_amount: u64,            // 24小时BTC累计交易金额，以USDT计算
+	pub btc_amount_power: u64,
 
     pub eth_total_power: u64,         // 24小时ETH累计算力
     pub eth_total_count: u64,             // 24小时ETH累计交易次数
+	pub eth_count_power: u64,
     pub eth_total_amount: u64,            // 24小时ETH累计交易金额，以USDT计算
+	pub eth_amount_power: u64,
 
     pub eos_total_power: u64,         // 24小时EOS累计算力
     pub eos_total_count: u64,             // 24小时EOS累计交易次数
+	pub eos_count_power: u64,
     pub eos_total_amount: u64,            // 24小时EOS累计交易金额，以USDT计算
+	pub eos_amount_power: u64,
 
     pub usdt_total_power: u64,         // 24小时USDT累计算力
     pub usdt_total_count: u64,             // 24小时USDT累计交易次数
+	pub usdt_count_power: u64,
     pub usdt_total_amount: u64,            // 24小时USDT累计交易金额，以USDT计算
+	pub usdt_amount_power: u64,
 
     block_number: BlockNumber,        // 区块高度
 }
@@ -123,10 +138,10 @@ impl<Storage, BlockNumber>TokenPowerInfoStore<Storage, BlockNumber> where
 {
     fn new_token_power_info(block_number: BlockNumber) -> TokenPowerInfo<BlockNumber> {
         TokenPowerInfo {
-            btc_total_power: 0u64, btc_total_count: 0u64, btc_total_amount: 0u64,
-            eth_total_power: 0u64, eth_total_count: 0u64, eth_total_amount: 0u64,
-            eos_total_power: 0u64, eos_total_count: 0u64, eos_total_amount: 0u64,
-            usdt_total_power: 0u64, usdt_total_count: 0u64, usdt_total_amount: 0u64,
+            btc_total_power: 0u64, btc_total_count: 0u64, btc_count_power: 0u64, btc_total_amount: 0u64, btc_amount_power: 0u64,
+            eth_total_power: 0u64, eth_total_count: 0u64, eth_count_power: 0u64, eth_total_amount: 0u64, eth_amount_power: 0u64,
+            eos_total_power: 0u64, eos_total_count: 0u64, eos_count_power: 0u64, eos_total_amount: 0u64,  eos_amount_power: 0u64,
+            usdt_total_power: 0u64, usdt_total_count: 0u64, usdt_count_power: 0u64, usdt_total_amount: 0u64, usdt_amount_power:0u64,
             block_number
         }
     }
@@ -146,7 +161,7 @@ impl<Storage, BlockNumber>TokenPowerInfoStore<Storage, BlockNumber> where
         let chain_run_days = block_number / BlockNumber::from(DAYS) + BlockNumber::from(1u32);
         let number: u32 = chain_run_days.try_into().ok().unwrap();
 
-        Self::read(number, block_number)
+        Self::read(number, block_number.clone())
     }
 
     // 从本地存储中获取前一天的TokenPowerInfo
@@ -154,41 +169,51 @@ impl<Storage, BlockNumber>TokenPowerInfoStore<Storage, BlockNumber> where
         let chain_run_days = block_number / BlockNumber::from(DAYS) + BlockNumber::from(1u32);
         let number: u32 = chain_run_days.try_into().ok().unwrap();
 
-        Self::read(number-1, block_number)
+        Self::read(number-1, block_number.clone())
     }
 
     // 增加Token算力
-    pub(crate) fn add_token_power(token_name: &str, add_power: u64, add_count: u64,
-                       add_amount: u64, block_number: BlockNumber)
+    pub(crate) fn add_token_power(token_name: Vec<u8>, add_power: u64, add_count: u64, add_count_power: u64,
+                       add_amount: u64, add_amount_power:u64, block_number: BlockNumber)
         -> result::Result<TokenPowerInfo<BlockNumber>, &'static str> {
         let chain_run_days = block_number / BlockNumber::from(DAYS) + BlockNumber::from(1u32);
         let number: u32 = chain_run_days.try_into().ok().unwrap();
-        let mut token_power_info = Self::read(number, block_number);
+        let mut token_power_info = Self::read(number, block_number.clone());
 
-        match token_name {
-            "btc" => {
-                token_power_info.btc_total_power += add_power;
-                token_power_info.btc_total_count += add_count;
-                token_power_info.btc_total_amount += add_amount;
-            },
-            "eth" => {
-                token_power_info.eth_total_power += add_power;
-                token_power_info.eth_total_count += add_count;
-                token_power_info.eth_total_amount += add_amount;
-            },
-            "eos" => {
-                token_power_info.eos_total_power += add_power;
-                token_power_info.eos_total_count += add_count;
-                token_power_info.eos_total_amount += add_amount;
-            },
-            "usdt" => {
-                token_power_info.usdt_total_power += add_power;
-                token_power_info.usdt_total_count += add_count;
-                token_power_info.usdt_total_amount += add_amount;
-            },
-            _ => return Err("Unsupported token"),
-        };
-        token_power_info.block_number = block_number;
+
+		if token_name == "btc".as_bytes().to_vec()  {
+			token_power_info.btc_total_power += add_power;
+			token_power_info.btc_total_count += add_count;
+			token_power_info.btc_count_power += add_count_power;
+			token_power_info.btc_total_amount += add_amount;
+			token_power_info.btc_amount_power += add_amount_power;
+		}
+		else if token_name == "eth".as_bytes().to_vec() {
+			token_power_info.eth_total_power += add_power;
+			token_power_info.eth_total_count += add_count;
+			token_power_info.eth_count_power += add_count_power;
+			token_power_info.eth_total_amount += add_amount;
+			token_power_info.eth_amount_power += add_amount_power;
+		}
+		else if token_name == "eos".as_bytes().to_vec() {
+			token_power_info.eos_total_power += add_power;
+			token_power_info.eos_total_count += add_count;
+			token_power_info.eos_count_power += add_count_power;
+			token_power_info.eos_total_amount += add_amount;
+			token_power_info.eos_amount_power += add_amount_power;
+		}
+		else if token_name == "usdt".as_bytes().to_vec() {
+			token_power_info.usdt_total_power += add_power;
+			token_power_info.usdt_total_count += add_count;
+			token_power_info.usdt_count_power += add_count_power;
+			token_power_info.usdt_total_amount += add_amount;
+			token_power_info.usdt_amount_power += add_amount_power;
+		}
+		else {
+			return Err("Unsupported token")
+		}
+
+        token_power_info.block_number = block_number.clone();
 
         Self::write(number, &token_power_info);
 
@@ -199,13 +224,14 @@ impl<Storage, BlockNumber>TokenPowerInfoStore<Storage, BlockNumber> where
     pub(crate) fn archive(block_number: BlockNumber) -> result::Result<TokenPowerInfo<BlockNumber>, &'static str> {
         let chain_run_days = block_number / BlockNumber::from(DAYS) + BlockNumber::from(1u32);
         let number: u32 = chain_run_days.try_into().ok().unwrap();
-        let mut archive_token_power_info = Self::read(number, block_number);
+        let mut archive_token_power_info = Self::read(number, block_number.clone());
 
-        archive_token_power_info.block_number = block_number;
+        archive_token_power_info.block_number = block_number.clone();
 
         Self::write(number, &archive_token_power_info);
 
-        let new_token_power_info = Self::new_token_power_info(block_number);
+		// todo 归档后初始化
+        let new_token_power_info = Self::new_token_power_info(block_number.clone());
         Self::write(number+1, &new_token_power_info);
 
         Ok(archive_token_power_info)
@@ -225,23 +251,34 @@ pub struct MinerPowerInfo<AccountId, BlockNumber> {
     miner_id: AccountId,                        // 矿工ID
     total_power: u64,                           // 24小时累计算力
     total_count: u64,                           // 24小时累计交易次数
+	count_power: u64,
     pub(crate) total_amount: u64,                          // 24小时累计交易金额，以USDT计算
+	amount_power: u64,
 
     btc_power: u64,                             // 24小时BTC累计算力
     pub(crate) btc_count: u64,                             // 24小时BTC累计次数
+	btc_count_power: u64,
     btc_amount: u64,                            // 24小时BTC累计金额，以USDT计算
+	btc_amount_power: u64,
+
 
     eth_power: u64,                             // 24小时ETH累计算力
     pub(crate) eth_count: u64,                             // 24小时ETH累计次数
+	eth_count_power: u64,
     eth_amount: u64,                            // 24小时ETH累计金额，以USDT计算
+	eth_amount_power: u64,
 
     eos_power: u64,                             // 24小时EOS累计算力
     pub(crate) eos_count: u64,                             // 24小时EOS累计次数
+	eos_count_power: u64,
     eos_amount: u64,                            // 24小时EOS累计金额，以USDT计算
+	eos_amount_power: u64,
 
     usdt_power: u64,                            // 24小时USDT累计算力
     pub(crate) usdt_count: u64,                            // 24小时USDT累计次数
+	usdt_count_power: u64,
     usdt_amount: u64,                           // 24小时USDT累计金额，以USDT计算
+	usdt_amount_power: u64,
 
     block_number: BlockNumber,                  // 区块高度
 }
@@ -255,11 +292,11 @@ impl<Storage, AccountId, BlockNumber>MinerPowerInfoStore<Storage, AccountId, Blo
     fn new_miner_power_info(miner_id: &AccountId, block_number: BlockNumber) -> MinerPowerInfo<AccountId, BlockNumber> {
         MinerPowerInfo {
             miner_id: miner_id.clone(),
-            total_power: 0u64, total_count: 0u64, total_amount: 0u64,
-            btc_power: 0u64, btc_count: 0u64, btc_amount: 0u64,
-            eth_power: 0u64, eth_count: 0u64, eth_amount: 0u64,
-            eos_power: 0u64, eos_count: 0u64, eos_amount: 0u64,
-            usdt_power: 0u64, usdt_count: 0u64, usdt_amount: 0u64,
+            total_power: 0u64, total_count: 0u64, total_amount: 0u64,count_power: 0u64, amount_power: 0u64,
+            btc_power: 0u64, btc_count: 0u64, btc_amount: 0u64, btc_count_power: 0u64, btc_amount_power: 0u64,
+            eth_power: 0u64, eth_count: 0u64, eth_amount: 0u64, eth_count_power: 0u64, eth_amount_power: 0u64,
+            eos_power: 0u64, eos_count: 0u64, eos_amount: 0u64, eos_count_power: 0u64, eos_amount_power: 0u64,
+            usdt_power: 0u64, usdt_count: 0u64, usdt_amount: 0u64, usdt_count_power: 0u64, usdt_amount_power: 0u64,
             block_number,
         }
     }
@@ -278,33 +315,49 @@ impl<Storage, AccountId, BlockNumber>MinerPowerInfoStore<Storage, AccountId, Blo
     }
 
     // 增加矿工当日算力，curr_point指MinerPowerInfoDict中指向当日算力的key，为MinerPowerInfoPrevPoint的对立值。
-    pub(crate) fn add_miner_power(miner_id: &AccountId, curr_point: u32, token_name: &str, add_power: u64,
-                       add_count: u64, add_amount: u64, block_number: BlockNumber) -> result::Result<MinerPowerInfo<AccountId, BlockNumber>, &'static str> {
+    pub(crate) fn add_miner_power(miner_id: &AccountId, curr_point: u32, token_name: Vec<u8>, add_power: u64,
+                       add_count: u64, add_count_power: u64, add_amount: u64, add_amount_power: u64, block_number: BlockNumber) -> result::Result<MinerPowerInfo<AccountId, BlockNumber>, &'static str> {
         let mut miner_power_info = Self::read(curr_point, miner_id, block_number);
-        match token_name {
-            "btc" => {
-                miner_power_info.btc_power += add_power;
-                miner_power_info.btc_count += add_count;
-                miner_power_info.btc_amount += add_amount;
-            },
-            "eth" => {
-                miner_power_info.eth_power += add_power;
-                miner_power_info.eth_count += add_count;
-                miner_power_info.eth_amount += add_amount;
-            },
-            "eos" => {
-                miner_power_info.eos_power += add_power;
-                miner_power_info.eos_count += add_count;
-                miner_power_info.eos_amount += add_amount;
-            },
-            "usdt" => {
-                miner_power_info.usdt_power += add_power;
-                miner_power_info.usdt_count += add_count;
-                miner_power_info.usdt_amount += add_amount;
-            },
-            _ => return Err("Unsupported token"),
-        };
-        miner_power_info.block_number = block_number;
+//        match token_name {
+		if token_name == "btc".as_bytes().to_vec() {
+			miner_power_info.btc_power += add_power;
+			miner_power_info.btc_count += add_count;
+			miner_power_info.btc_amount += add_amount;
+			miner_power_info.btc_count_power += add_count_power;
+			miner_power_info.btc_amount_power += add_amount_power;
+		}
+		else if token_name == "eth".as_bytes().to_vec() {
+			miner_power_info.eth_power += add_power;
+			miner_power_info.eth_count += add_count;
+			miner_power_info.eth_amount += add_amount;
+			miner_power_info.eth_count_power += add_count_power;
+			miner_power_info.eth_amount_power += add_amount_power;
+		}
+		else if token_name == "eos".as_bytes().to_vec() {
+			miner_power_info.eos_power += add_power;
+			miner_power_info.eos_count += add_count;
+			miner_power_info.eos_amount += add_amount;
+			miner_power_info.eos_count_power += add_count_power;
+			miner_power_info.eos_amount_power += add_amount_power;
+		}
+		else if token_name == "usdt".as_bytes().to_vec() {
+			miner_power_info.usdt_power += add_power;
+			miner_power_info.usdt_count += add_count;
+			miner_power_info.usdt_amount += add_amount;
+			miner_power_info.usdt_count_power += add_count_power;
+			miner_power_info.usdt_amount_power += add_amount_power;
+		}
+		else{
+			return Err("Unsupported token")
+			}
+
+		miner_power_info.total_power += add_power;
+		miner_power_info.total_count += add_count;
+		miner_power_info.total_amount += add_amount;
+		miner_power_info.count_power += add_count_power;
+		miner_power_info.amount_power += add_amount_power;
+
+        miner_power_info.block_number = block_number.clone();
 
         Self::write(curr_point, miner_id, &miner_power_info);
 

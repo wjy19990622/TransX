@@ -23,7 +23,7 @@ pub struct MineParm {
     pub amount:u64,  // eth 等需要是整数
     pub protocol:Vec<u8>,
     pub decimal:u64,  // 精度
-    pub usdt_nums: u32,
+    pub usdt_nums: u64,
     pub blockchain:Vec<u8>,
     pub memo:Vec<u8>
 }
@@ -33,7 +33,7 @@ pub struct MineParm {
 #[derive(Encode, Decode)]
 pub struct PersonMineWorkForce<BlockNumber>{
     mine_cnt: u64, // 当天的挖矿次数
-    usdt_nums: u32,  // 完成的金额
+    usdt_nums: u64,  // 完成的金额
     work_force: u64,  // 当天的算力
     settle_blocknumber:BlockNumber, // 上一次结算时的区块高度,用于区分是否是第二天了
 }
@@ -68,7 +68,7 @@ impl<Storage, Key,BlockNumber> PersonMine<Storage, Key,BlockNumber> where
         10
     }
 
-    pub fn add(key: &Key,usdt_nums:u32,now_day:BlockNumber,block_num:BlockNumber)-> Result{
+    pub fn add(key: &Key,usdt_nums:u64,now_day:BlockNumber,block_num:BlockNumber)-> Result{
         // 获取上次的算力
         let mut personmine_work_force = Self::read(key,now_day);
         let block_nums = BlockNumber::from(BLOCK_NUMS);
@@ -124,7 +124,7 @@ pub struct PersonMineRecord<Moment,BlockNumber,Balance,AccountId>{
     amount:Balance,              // 支付的金额
     blockchain:Vec<u8>,       // 哪条链
     tx:Vec<u8>,              // 交易的hash
-    usdt_amount:u32,         // usdt 总价格
+    usdt_amount: u64,         // usdt 总价格
     pcount_workforce:u64,     // 这次交易频次算力
     pamount_workforce:u64,     //这次交易金额算力
     reward:Balance,                 // 奖励的token

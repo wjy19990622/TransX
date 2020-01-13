@@ -2,6 +2,7 @@ use support::{debug,decl_storage, decl_module,decl_event, StorageValue, StorageM
 			  dispatch::Result, weights::{SimpleDispatchInfo},Blake2_256, ensure,dispatch::Vec,traits::Currency, StorageDoubleMap};
 use support::traits::{Get, ReservableCurrency};
 use system::{ensure_signed};
+use rstd::convert::{TryInto,TryFrom};
 use sp_runtime::traits::{Hash,SimpleArithmetic, Bounded, One, Member,CheckedAdd, Zero};
 use sp_runtime::{Permill};
 use codec::{Encode, Decode};
@@ -9,16 +10,17 @@ use crate::mine_linked::{PersonMineWorkForce,PersonMine,MineParm,PersonMineRecor
 //use node_primitives::BlockNumber;
 use crate::register::{self,MinersCount,AllMiners,Trait as RegisterTrait};
 use crate::mine_power::{PowerInfo, MinerPowerInfo, TokenPowerInfo, PowerInfoStore, MinerPowerInfoStore, TokenPowerInfoStore};
-use node_primitives::{Count, USD, PermilllChangeIntoU64, Duration};
+use node_primitives::{Count, USD, PermilllChangeIntoF64, Duration};
 use rstd::{result};
 
 use rstd::prelude::*;
-use rstd::convert::TryInto;
+
 
 
 // 继承 register 模块,方便调用register里面的 store
 pub trait Trait: balances::Trait + RegisterTrait{
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
+	type Currency3: Currency<Self::AccountId> + ReservableCurrency<Self::AccountId>;
 	type MineIndex: Parameter + Member + SimpleArithmetic + Bounded + Default + Copy;
 //	type TranRuntime: RegisterTrait;
 	// 算力归档时间，到达这个时间，则将`WorkforceInfo`信息写入到链上并不再修改。
@@ -37,15 +39,15 @@ pub trait Trait: balances::Trait + RegisterTrait{
 	type EOSMaxPortion: Get<Permill>;
 	type USDTMaxPortion: Get<Permill>;
 
-	type SuperiorShareRatio: Get<PermilllChangeIntoU64>;
-	type OnsuperiorShareRatio: Get<PermilllChangeIntoU64>;
+	type SuperiorShareRatio: Get<PermilllChangeIntoF64>;
+	type OnsuperiorShareRatio: Get<PermilllChangeIntoF64>;
 
 	type SubHalfDuration: Get<Duration>;  // 减半周期
 
 }
 
 type StdResult<T> = core::result::Result<T, &'static str>;
-type BalanceOf<T> = <T as balances::Trait>::Balance;
+type BalanceOf<T> = <<T as Trait>::Currency3 as Currency<<T as system::Trait>::AccountId>>::Balance;
 
 type BlockNumberOf<T> = <T as system::Trait>::BlockNumber;  // u32
 
@@ -123,8 +125,8 @@ decl_module! {
         fn deposit_event() = default;
         const ArchiveDuration: T::BlockNumber = T::ArchiveDuration::get();
 
-		#[weight = SimpleDispatchInfo::FixedNormal(500_000)]
-        pub fn create_mine(origin,mine_tag: MineTag, tx: Vec<u8>, address: Vec<u8>,to_address:Vec<u8>,symbol:Vec<u8>,amount:u64,protocol:Vec<u8>,decimal:u64,usdt_nums:u32,blockchain:Vec<u8>,memo:Vec<u8>) -> Result { // 创建挖矿
+
+        pub fn create_mine(origin,mine_tag: MineTag, tx: Vec<u8>, address: Vec<u8>,to_address:Vec<u8>,symbol:Vec<u8>,amount:u64,protocol:Vec<u8>,decimal:u64,usdt_nums:u64,blockchain:Vec<u8>,memo:Vec<u8>) -> Result { // 创建挖矿
         	// 传入参数: todo: 还是 amount/10.pow(decimal)
         	// {"action":"transfer","contract":"",  // 传入一定是 transfer
         	//  "tx":"eth_xxxxxxxx",      // 币名字 + "_" + "tx hash"  的 字节码.名字为小写
@@ -137,9 +139,8 @@ decl_module! {
         	ensure!(<AllMiners<T>>::exists(sender.clone()), "account not register");
         	ensure!(T::Currency1::reserved_balance(&sender)>=T::PledgeAmount::get(),"your reservable currency is not enough");
         	ensure!(address != to_address,"you cannot transfer  to yourself");
-        	ensure!(usdt_nums<u32::max_value(),"usdt_nums is overflow");
+        	ensure!(usdt_nums<u64::max_value(),"usdt_nums is overflow");
         	ensure!(usdt_nums>5,"usdt_nums is too small");
-
         	// 有两种挖矿方式  所以一比交易最多能够进行两次挖矿
         	ensure!(!(<OwnerMineRecord<T>>::exists(tx.clone())
         	&& (<OwnerMineRecord<T>>::get(tx.clone()).unwrap().mine_tag == mine_tag.clone()  ||  (<OwnerMineRecord<T>>::get(tx.clone()).unwrap().mine_count >= 2u16))), "tx already exists");
@@ -148,6 +149,7 @@ decl_module! {
 			ensure!(!Self::is_token_power_more_than_portion(symbol.clone()), "this token is more than max portion today.");
 
         	let block_num = <system::Module<T>>::block_number();
+
         	let now_tokenpowerinfo = <TokenPowerInfoStoreItem<T>>::get_curr_token_power(block_num);
         	let PCbtc = now_tokenpowerinfo.btc_total_count;
         	let PAbtc =  now_tokenpowerinfo.btc_total_amount;
@@ -243,6 +245,64 @@ impl<T: Trait> Module<T> {
 		if owned_mineindex > T::MiningMaximum::get(){  // todo: maximum 通过其他函数调用
 			return Err("your mining frequency exceeds the maximum frequency");
 		}
+		//--------------------------------------------------------------------------------------------
+		// todo 计算算力
+		// ***计算金额算力***
+		let enlarge_usdt_nums: u64 = mine_parm.usdt_nums.clone();  // 把金额放大100倍
+		// 计算总额度算力
+		let mut amount_workforce = Self::calculate_count_or_amount_workforce(&sender, block_num, mine_parm.symbol.clone(), enlarge_usdt_nums, true)?;
+		// 获取膨胀金额算力（真实算力）
+		amount_workforce = Self::inflate_power(sender.clone(), amount_workforce);
+		// 获取次数算力
+		let mut count_workforce = Self::calculate_count_or_amount_workforce(&sender, block_num, mine_parm.symbol.clone(), 100 as u64, false)?;
+		// 获取膨胀后的次数算力（真实算力）
+		count_workforce = Self::inflate_power(sender.clone(), count_workforce);
+		// 获取昨天的总金额
+		let mut prev_total_amount = <PowerInfoStoreItem<T>>::get_prev_power(block_num.clone()).total_amount;
+
+		// 获取昨天的总次数
+		let mut prev_total_count = <PowerInfoStoreItem<T>>::get_prev_power(block_num.clone()).total_count;
+		// 计算总算力占比
+
+		let workforce_ratio = Self::caculate_workforce_ratio(amount_workforce.clone(), count_workforce.clone(), prev_total_amount.clone(), prev_total_count.clone());
+
+		// 计算奖励
+		// 获取当天奖励的token
+		let mut today_reward = <BalanceOf<T>>::from(0u32);
+		match Self::per_day_mine_reward_token() {
+			Some(a) => today_reward = a,
+			None => return Err("tdday reward err")
+		}
+		// 把算力占比变成balance类型  这里是初始化 下面才是真的赋值
+		let mut workforce_ratio_change_into_balance = <BalanceOf<T>>::from(0u32);
+		// 精度  这里采用10位 因为u64不能用 所以用两个u32代替
+		let mut fenmu0 = <BalanceOf<T>>::from(1_0000_0000u32);
+		let mut fenmu1 = <BalanceOf<T>>::from(10u32);
+		let decimal = fenmu1*fenmu0;
+		// 把算力占比变成balance类型  这里赋值
+		match <BalanceOf<T>>::try_from(workforce_ratio as usize).ok(){
+			Some(b) => workforce_ratio_change_into_balance = b,
+			None => return Err("fenzi err")
+		}
+		// 计算当天奖励
+		let thistime_reward = today_reward * workforce_ratio_change_into_balance/decimal;
+		// 如果账户不存在 则不会进行存储那一步
+		T::Currency3::deposit_into_existing(&sender, thistime_reward)?;
+
+		// 全网算力存储
+
+		<PowerInfoStoreItem<T>>::add_power(workforce_ratio.clone(), 1u64, count_workforce.clone(), mine_parm.usdt_nums.clone(),
+		amount_workforce.clone(), block_num.clone());
+		// 全网token信息存储
+		<TokenPowerInfoStoreItem<T>>::add_token_power(mine_parm.symbol.clone(), workforce_ratio, 1u64, count_workforce, mine_parm.usdt_nums.clone(),
+		amount_workforce, block_num);
+
+		let curr_point = Self::miner_power_info_point().1;
+		<MinerPowerInfoStoreItem<T>>::add_miner_power(&sender, curr_point.clone(), mine_parm.symbol.clone(), workforce_ratio,
+		1u64, count_workforce, mine_parm.usdt_nums.clone(), amount_workforce, block_num);
+
+
+		//--------------------------------------------------------------------------------------------
 		// 将挖矿记录进去
 		// TODO 这里有可能有错误  两次插入数据是同一个key
 
@@ -301,7 +361,7 @@ impl<T: Trait> Module<T> {
 	}
 
 	// 计算矿工一次挖矿的算力，coin_amount指本次交易以USDT计价的金额
-	fn calculate_workforce(miner_id: &T::AccountId, block_number: T::BlockNumber, coin_name: &str, coin_number: f64, coin_price: f64)
+	fn calculate_count_or_amount_workforce(miner_id: &T::AccountId, block_number: T::BlockNumber, coin_name: Vec<u8>, usdt_nums: u64, is_amount_power: bool)
 		-> result::Result<u64, &'static str> {
         let (prev_point, curr_point) = Self::miner_power_info_point();
         let miner_power_info = <MinerPowerInfoStoreItem<T>>::get_miner_power_info(curr_point, miner_id, block_number.clone());
@@ -312,48 +372,74 @@ impl<T: Trait> Module<T> {
 
         let alpha = 0.3;
         let beta = 1.0 - alpha;
-        let sr = 0.5;
-        match coin_name {
-            "btc" => {
+
+	let mut work_power = 0 as u64;
+
+        if  coin_name == "btc".as_bytes().to_vec() {
+
                 let lc_btc = 100u64;
                 ensure!(miner_power_info.btc_count <= lc_btc, "BTC mining count runs out today");
 
                 // 计算矿机P一次BTC转账的频次算力PCW btc = α * 1 / TC / PPC btc ( PC btc < LC btc )
                 // 矿机P计算BTC频次算力钝化系数，PPC btc = ( (PC btc + 1 ) / AvC btc ) % 10
-                let avc_btc = prev_token_power_info.btc_total_count.checked_div(miner_numbers).ok_or("Calc AvC btc causes overflow")?;
-                let ppc_btc_divisor = prev_miner_power_info.btc_count.checked_add(1).ok_or("Calc PPC btc divisor causes overflow")?;
-                let divisor = ppc_btc_divisor.checked_div(avc_btc).ok_or("Calc PPC btc parameter causes overflow")?;
-                let ppc_btc = divisor % 10;
+				if is_amount_power{
+					//                let coin_amount = (coin_price * coin_number) as u64;
+					// PPA btc	矿机P计算BTC金额算力钝化系数	PPA btc = ( (Price(BTC) * m btc +PAbtc ) / AvA btc ) % 10
+					// todo 以下是计算金额算力
+					let mut pa = prev_miner_power_info.total_amount;
+					if pa < 10 {
+						pa = 1000;
+					}
+					let ava_btc = prev_token_power_info.btc_total_amount.checked_div(miner_numbers).ok_or("Calc AvA btc causes overflow")?;  // 平均每个区块多少钱
+					let ppa_btc_divisor = usdt_nums + prev_token_power_info.btc_total_amount;
+					let divisor = ppa_btc_divisor.checked_div(ava_btc).ok_or("Calc PPC btc parameter causes overflow")?;
+					let ppa_btc = divisor % 10;
+					let paw_btc = (beta * (usdt_nums as f64) * ppa_btc as f64 / pa as f64) as u64;
+					work_power = paw_btc;
 
-                let mut tc = prev_power_info.total_count;
-                if tc == 0 {
-                    tc = 100;
-                }
-                let pcw_btc:f64 = alpha * ppc_btc as f64 / tc as f64;
+				}
+				else{
+					let avc_btc = prev_token_power_info.btc_total_count.checked_div(miner_numbers).ok_or("Calc AvC btc causes overflow")?;  // todo 平均一个区块产生多少btc
+					let ppc_btc_divisor = prev_miner_power_info.btc_count.checked_add(1).ok_or("Calc PPC btc divisor causes overflow")?;
+					let divisor = ppc_btc_divisor.checked_div(avc_btc).ok_or("Calc PPC btc parameter causes overflow")?;
+					let ppc_btc = divisor % 10;
 
-                let mut pa = prev_miner_power_info.total_amount;
-                if pa < 10 {
-                    pa = 1000;
-                }
+					let mut tc = prev_power_info.total_count;
+					if tc == 0 {
+						tc = 100;
+					}
+					let pcw_btc = (alpha * ppc_btc as f64 / tc as f64) as u64;
+					work_power = pcw_btc;
+				}
 
-                let coin_amount = (coin_price * coin_number) as u64;
-                // PPA btc	矿机P计算BTC金额算力钝化系数	PPA btc = ( (Price(BTC) * m btc +PAbtc ) / AvA btc ) % 10
-                let ava_btc = prev_token_power_info.btc_total_amount.checked_div(miner_numbers).ok_or("Calc AvA btc causes overflow")?;
-                let ppa_btc_divisor = coin_amount + prev_token_power_info.btc_total_amount;
-                let divisor = ppa_btc_divisor.checked_div(avc_btc).ok_or("Calc PPC btc parameter causes overflow")?;
-                let ppa_btc = divisor % 10;
-                let paw_btc = beta * coin_number * coin_price * ppa_btc as f64 / pa as f64;
-                let pw_btc:f64 = (pcw_btc + paw_btc) * sr;
+				return Ok(work_power); // todo 算力应该是个浮点数
 
-                return Ok(pw_btc as u64);
-            }
 
-            _ => return Err("Unsupported token")
         }
+		else {
+			return Err("Unsupported token")
+		}
 
-		Ok(10u64)
+		Ok(10 as u64)
 	}
 
+	// todo 计算总算力占比   目前金额算力占比与次数算力占比是1：1关系  这个占比目前可以直接用u64
+	// todo 这个数取整  是为了避免浮点数的不准确性
+	fn caculate_workforce_ratio(amount_workforce: u64, count_workforce: u64, mut pre_amount_workfore: u64, mut pre_count_workforce: u64) -> u64{
+		let a_sr = 0.5;  // 金额算力占比
+		let c_sr= 1.0-a_sr;  // 次数算力占比
+
+		if pre_count_workforce == 0_u64{
+			pre_count_workforce = 1000u64; // 初始化1000笔
+		}
+		if pre_amount_workfore == 0_u64{
+			pre_amount_workfore = 10_0000u64;  // 初始化1000万金额
+		}
+
+		let decimal = 100_0000_0000u64 as f64;
+		let workforce_ratio = (amount_workforce as f64 * decimal  / pre_amount_workfore as f64  * a_sr + count_workforce as f64 * decimal / pre_count_workforce as f64 * c_sr) as u64;
+		workforce_ratio
+	}
 
 	fn remove_expire_record(who: T::AccountId, is_remove_all: bool) {
 		/// 删除过期记录
@@ -450,7 +536,7 @@ impl<T: Trait> Module<T> {
 		}
 
 
-	fn per_day_mine_reward_token() -> Option<T::Balance>{
+	fn per_day_mine_reward_token() -> Option<BalanceOf<T>>{
 		/// 计算每一天的挖矿奖励
 		let block_num = <system::Module<T>>::block_number(); // 获取区块的高度
 		let day_block_nums = <BlockNumberOf<T>>::from(BLOCK_NUMS);  // wjy 一天出多少块
@@ -468,17 +554,18 @@ impl<T: Trait> Module<T> {
 
 	}
 
-	fn inflate_power(who: T::AccountId, mine_power: u64) -> u64{
+	// todo 这里有问题的 应该把把这个金额数值再放大到100倍  这样计算数值的时候才能最大限度的准确
+	fn inflate_power(who: T::AccountId, mine_power: u64) -> u64{  // todo 膨胀算力在计算算力之后  把膨胀算力加入到累计算力里面
 		/// 计算膨胀算力
-		let mut grandpa = 0;
-		let mut father = 0;
+		let mut grandpa = 0.0;
+		let mut father = 0.0;
 		if let Some(father_address) = <AllMiners<T>>::get(who.clone()).father_address{
 			father = T::OnsuperiorShareRatio::get();
 		};
 		if let Some(grandpa_address) = <AllMiners<T>>::get(who.clone()).grandpa_address{
 			grandpa = T::SuperiorShareRatio::get();
 		};
-		let inflate_power = mine_power + mine_power*father/100 + mine_power*grandpa/100;
+		let inflate_power = (mine_power as f64 + mine_power as f64 *father as f64/100 as f64 + mine_power as f64 *grandpa as f64/100 as f64) as u64;
 		inflate_power
 	}
 }
