@@ -224,7 +224,7 @@ pub fn testnet_genesis(
 
 	const ENDOWMENT: Balance = 1_0000 * DOLLARS;  //一个人10000token
 	const STASH: Balance = 100 * DOLLARS;
-	let FOUNDERS: Vec<AccountId> = vec![get_account_id_from_seed::<sr25519::Public>("Alice"),get_account_id_from_seed::<sr25519::Public>("Bob")].into();
+	let founders: Vec<AccountId> = vec![get_account_id_from_seed::<sr25519::Public>("Alice"),get_account_id_from_seed::<sr25519::Public>("Bob")].into();
 	GenesisConfig {
 		system: Some(SystemConfig {
 			code: WASM_BINARY.to_vec(),
@@ -303,7 +303,7 @@ pub fn testnet_genesis(
 		treasury: Some(Default::default()),
 
 		mine: Some(MineConfig{
-			founders: FOUNDERS,
+			founders: founders,
 		}),
 	}
 }
