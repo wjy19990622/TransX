@@ -300,19 +300,9 @@ impl<T: Trait> Module<T> {
 
 		// 计算这一次的总挖矿奖励
 		let thistime_reward = today_reward * workforce_ratio_change_into_balance/decimal;
-		// 矿工奖励
-		let miner_reward = thistime_reward*<BalanceOf<T>>::from(8)/<BalanceOf<T>>::from(10);
-		// 每一个创始团队成员的奖励
-		let per_founder_reward = thistime_reward/<BalanceOf<T>>::from(10);
 
-		T::Currency3::deposit_into_existing(&sender, miner_reward)?;
-
-		let fouders = Self::founders();
-		for i in fouders.iter(){
-			T::Currency3::deposit_into_existing(&i, per_founder_reward);
-		}
-		// 奖励上级与上上级
-		Self::reward_parent_or_super(sender.clone(), thistime_reward);
+		// 奖励所有人
+		Self::reward_all_peaple(sender.clone(), thistime_reward)?;
 
 		// 全网算力存储
 		<PowerInfoStoreItem<T>>::add_power(workforce_ratio.clone(), 1u64, count_workforce.clone(), mine_parm.usdt_nums.clone(),
@@ -583,15 +573,33 @@ impl<T: Trait> Module<T> {
 		inflate_power
 	}
 
-	fn reward_parent_or_super(who: T::AccountId, thistime_reward_token: BalanceOf<T>){
+	fn reward_all_peaple(who: T::AccountId, thistime_reward: BalanceOf<T>) -> Result{
+		// 矿工与上上级的总奖励
+		let mut miner_reward = thistime_reward*<BalanceOf<T>>::from(8)/<BalanceOf<T>>::from(10);
+
+		// 每一个创始团队成员的奖励
+		let per_founder_reward = thistime_reward/<BalanceOf<T>>::from(10);
+		let fouders = Self::founders();
+		for i in fouders.iter(){
+			T::Currency3::deposit_into_existing(&i, per_founder_reward);
+		}
+
+		// 奖励上级
 		if let Some(father_address) = <AllMiners<T>>::get(who.clone()).father_address{
-			let fa_reward = thistime_reward_token * <BalanceOf<T>>::from(2u32)/<BalanceOf<T>>::from(10u32);
+			let fa_reward = miner_reward * <BalanceOf<T>>::from(50u32)/<BalanceOf<T>>::from(100u32);
 			T::Currency3::deposit_creating(&father_address, fa_reward);
+			miner_reward -= fa_reward;
 		};
+		// 奖励上上级
 		if let Some(grandpa_address) = <AllMiners<T>>::get(who.clone()).grandpa_address{
-			let gr_reward = thistime_reward_token * <BalanceOf<T>>::from(1u32)/<BalanceOf<T>>::from(10u32);
+			let gr_reward = miner_reward * <BalanceOf<T>>::from(25u32)/<BalanceOf<T>>::from(100u32);
 			T::Currency3::deposit_creating(&grandpa_address, gr_reward);
+			miner_reward -= gr_reward;
 		};
+
+		// 奖励矿工
+		T::Currency3::deposit_into_existing(&who, miner_reward)?;
+		Ok(())
 	}
 }
 
