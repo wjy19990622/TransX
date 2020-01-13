@@ -146,7 +146,8 @@ decl_module! {
         	ensure!(address != to_address,"you cannot transfer  to yourself");
         	ensure!(usdt_nums<u64::max_value(),"usdt_nums is overflow");
         	ensure!(usdt_nums>5,"usdt_nums is too small");
-        	// 有两种挖矿方式  所以一比交易最多能够进行两次挖矿
+
+        	// 挖矿类型不能相同 并且挖矿次数不能大于2
         	ensure!(!(<OwnerMineRecord<T>>::exists(tx.clone())
         	&& (<OwnerMineRecord<T>>::get(tx.clone()).unwrap().mine_tag == mine_tag.clone()  ||  (<OwnerMineRecord<T>>::get(tx.clone()).unwrap().mine_count >= 2u16))), "tx already exists");
 
@@ -154,12 +155,14 @@ decl_module! {
 			ensure!(!Self::is_token_power_more_than_portion(symbol.clone()), "this token is more than max portion today.");
 
         	let block_num = <system::Module<T>>::block_number();
-
         	let now_tokenpowerinfo = <TokenPowerInfoStoreItem<T>>::get_curr_token_power(block_num);
         	let PCbtc = now_tokenpowerinfo.btc_total_count;
         	let PAbtc =  now_tokenpowerinfo.btc_total_amount;
+
+        	// btc挖矿次数或是金额大于一定数目 则停止挖矿
         	ensure!(!(T::BTCLimitCount::get() <= PCbtc || T::BTCLimitAmount::get() <= PAbtc), "btc count or amount allreadey enough.");
 
+			// 删除过期的交易tx（为了减轻存储负担）
 			Self::remove_expire_record(sender.clone(), false);
 
 			let mut mine_count = 1u16;
@@ -221,8 +224,10 @@ decl_module! {
         }
 
 		fn on_finalize(block_number: T::BlockNumber) {
+			// 打印创始团队成员的AccountId
 			debug::RuntimeLogger::init();
 			debug::print!("mine module fouders:---------------------------------{:?}", Self::founders());
+
             if (block_number % T::ArchiveDuration::get()).is_zero() {
                 Self::archive(block_number);
             }
@@ -233,11 +238,12 @@ decl_module! {
 impl<T: Trait> Module<T> {
 	fn mining(mine_parm:MineParm,sender: T::AccountId)->Result{
 		ensure!(<AllMiners<T>>::exists(sender.clone()), "account not register");
-//		<register::Module<T>>::add_token_info([1,2,3].to_vec(),[1,2,3].to_vec());
-//		register::Call::<T>::add_token_info([1,2,3].to_vec(),[1,2,3].to_vec());
-		let block_num = <system::Module<T>>::block_number(); // 获取区块的高度
+		// 获取日期
+		let block_num = <system::Module<T>>::block_number();
 		let day_block_nums = <BlockNumberOf<T>>::from(BLOCK_NUMS);
 		let now_day = block_num/day_block_nums;
+
+
 		let now_time = <timestamp::Module<T>>::get();   // 记录到秒
 		let balance = <T::Balance>::from(12);  // todo test,最后需要获取balance,从哪儿来?
 		let balance1 = <T::Balance>::from(12);  // todo test
@@ -251,9 +257,10 @@ impl<T: Trait> Module<T> {
 			return Err("your mining frequency exceeds the maximum frequency");
 		}
 		//--------------------------------------------------------------------------------------------
-		// todo 算力模块
-		// ***计算金网算力***
-		let enlarge_usdt_nums: u64 = mine_parm.usdt_nums.clone();  // todo 把金额放大100倍  是考虑到算力精度
+		// ***以下跟算力相关
+
+		// 把金额与次数均放大100倍  获得更大的算力精度
+		let enlarge_usdt_nums: u64 = mine_parm.usdt_nums.clone();
 		// 计算金额算力
 		let mut amount_workforce = Self::calculate_count_or_amount_workforce(&sender, block_num, mine_parm.symbol.clone(), enlarge_usdt_nums, true)?;
 		// 获取膨胀金额算力（真实算力）
@@ -271,8 +278,7 @@ impl<T: Trait> Module<T> {
 		// 计算总算力占比
 		let workforce_ratio = Self::caculate_workforce_ratio(amount_workforce.clone(), count_workforce.clone(), prev_total_amount.clone(), prev_total_count.clone());
 
-		// 计算奖励
-		// 获取当天奖励的token
+		// 获取该日期挖矿奖励的总token
 		let mut today_reward = <BalanceOf<T>>::from(0u32);
 		match Self::per_day_mine_reward_token() {
 			Some(a) => today_reward = a,
@@ -280,24 +286,27 @@ impl<T: Trait> Module<T> {
 		}
 		// 把算力占比变成balance类型  这里是初始化 下面才是真的赋值
 		let mut workforce_ratio_change_into_balance = <BalanceOf<T>>::from(0u32);
-		// 精度  这里采用10位 因为u64不能用 所以用两个u32代替
-		let mut fenmu0 = <BalanceOf<T>>::from(1_0000_0000u32);
-		let mut fenmu1 = <BalanceOf<T>>::from(10u32);
-		let decimal = fenmu1*fenmu0;
 
-		// 把算力占比变成balance类型  这里赋值
+		// 精度  这里采用10位 因为u64不能用 所以用两个u32代替
+		let mut decimals1 = <BalanceOf<T>>::from(1_0000_0000u32);
+		let mut decimal2 = <BalanceOf<T>>::from(10u32);
+		let decimal = decimals1*decimal2;
+
+		// 把算力占比变成balance类型
 		match <BalanceOf<T>>::try_from(workforce_ratio as usize).ok(){
 			Some(b) => workforce_ratio_change_into_balance = b,
 			None => return Err("fenzi err")
 		}
 
-		// 计算当天奖励
+		// 计算这一次的总挖矿奖励
 		let thistime_reward = today_reward * workforce_ratio_change_into_balance/decimal;
-		// 如果账户不存在 则不会进行存储那一步
-
+		// 矿工奖励
 		let miner_reward = thistime_reward*<BalanceOf<T>>::from(8)/<BalanceOf<T>>::from(10);
+		// 每一个创始团队成员的奖励
 		let per_founder_reward = thistime_reward/<BalanceOf<T>>::from(10);
+
 		T::Currency3::deposit_into_existing(&sender, miner_reward)?;
+
 		let fouders = Self::founders();
 		for i in fouders.iter(){
 			T::Currency3::deposit_into_existing(&i, per_founder_reward);
@@ -309,16 +318,14 @@ impl<T: Trait> Module<T> {
 		// 全网token信息存储
 		<TokenPowerInfoStoreItem<T>>::add_token_power(mine_parm.symbol.clone(), workforce_ratio, 1u64, count_workforce, mine_parm.usdt_nums.clone(),
 		amount_workforce, block_num);
-
+		// 矿工个人算力存储
 		let curr_point = Self::miner_power_info_point().1;
 		<MinerPowerInfoStoreItem<T>>::add_miner_power(&sender, curr_point.clone(), mine_parm.symbol.clone(), workforce_ratio,
 		1u64, count_workforce, mine_parm.usdt_nums.clone(), amount_workforce, block_num);
 
 		//--------------------------------------------------------------------------------------------
-		// 将挖矿记录进去
 		let person_mine_record = PersonMineRecord::new(&mine_parm, sender.clone(),now_time, block_num, balance2)?;
 
-		// 先删除再添加
 		if <OwnerMineRecord<T>>::exists(&mine_parm.tx){
 			<OwnerMineRecord<T>>::remove(&mine_parm.tx)
 		}
@@ -496,10 +503,8 @@ impl<T: Trait> Module<T> {
 		}
 	}
 
-	fn is_token_power_more_than_portion(symbol: Vec<u8>) -> bool{
+	fn is_token_power_more_than_portion(symbol: Vec<u8>) -> bool{// 参数要小写
 		/// 判断该token在全网算力是否超额
-		// 小写传进来
-
 		let mut is_too_large: bool = false;
 		let mut max_portion: Permill = Permill::from_percent(0);
 		let block_num = <system::Module<T>>::block_number();
@@ -561,7 +566,7 @@ impl<T: Trait> Module<T> {
 
 	}
 
-	// todo 把这个usdt金额数值再放大到100倍  这样计算数值的时候才能最大限度的准确
+	// 把这个usdt金额数值再放大到100倍  这样计算数值的时候才能最大限度的准确
 	fn inflate_power(who: T::AccountId, mine_power: u64) -> u64{  // todo 膨胀算力在计算算力之后  把膨胀算力加入到累计算力里面
 		/// 计算膨胀算力
 		let mut grandpa = 0.0;
