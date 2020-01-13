@@ -586,13 +586,13 @@ impl<T: Trait> Module<T> {
 
 		// 奖励上级
 		if let Some(father_address) = <AllMiners<T>>::get(who.clone()).father_address{
-			let fa_reward = miner_reward * <BalanceOf<T>>::from(50u32)/<BalanceOf<T>>::from(100u32);
+			let fa_reward = miner_reward * <BalanceOf<T>>::from(10u32)/<BalanceOf<T>>::from(35u32);
 			T::Currency3::deposit_creating(&father_address, fa_reward);
 			miner_reward -= fa_reward;
 		};
 		// 奖励上上级
 		if let Some(grandpa_address) = <AllMiners<T>>::get(who.clone()).grandpa_address{
-			let gr_reward = miner_reward * <BalanceOf<T>>::from(25u32)/<BalanceOf<T>>::from(100u32);
+			let gr_reward = miner_reward * <BalanceOf<T>>::from(5u32)/<BalanceOf<T>>::from(35u32);
 			T::Currency3::deposit_creating(&grandpa_address, gr_reward);
 			miner_reward -= gr_reward;
 		};
