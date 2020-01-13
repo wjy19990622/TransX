@@ -2,9 +2,13 @@
 配置json格式
 ```json
 {
+  
   "MineIndex": "u64",
   "BlockNumberOf": "u32",
+  "MineTag": " ",
   "OwnerMineRecordItem": {
+    "mine_tag": "MineTag",
+    "mine_count": "u16",
     "timestamp": "Moment",
     "blocknum": "u32",
     "miner_address": "AccountId",
@@ -23,7 +27,7 @@
   },
   "OwnerMineWorkForce": {
     "mine_cnt": "u64",
-    "usdt_nums": "u32",
+    "usdt_nums": "u64",
     "work_force": "u64",
     "settle_blocknumber": "u32"
   },
@@ -39,6 +43,29 @@
   },
   "PriceFailedOf": "PriceFailed",
   
+  "MinerInfo": {
+      "hardware_id": "Vec<u8>",
+      "father_address": "Option<AccountId",
+      "grandpa_address": "Option<AccountId>",
+      "register_time": "Moment",
+      "machine_state": "Vec<u8>",
+      "machine_owner": "AccountId"
+  },
+  
+  "VoteInfo": {
+        "start_vote_block": "BlockNumber",
+        "symbol": "Vec<u8>",
+        "tx": "Vec<u8>",
+        "tx_hash": "Hash",
+        "reporter": "AccountId",
+        "report_reason": "Vec<u8>",
+        "illegal_man": "AccountId",
+        "transaction_amount": "Balance",
+        "usdt_amount": "Balance",
+        "decimals": "u32",
+        "approve_mans": "Vec<AccountId>",
+        "reject_mans": "Vec<AccountId>"
+  }
   
 }
 
