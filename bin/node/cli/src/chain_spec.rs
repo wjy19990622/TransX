@@ -310,7 +310,7 @@ fn development_config_genesis() -> GenesisConfig {
 			get_authority_keys_from_seed("Alice"),
 		],														//initial_authorities
 		get_account_id_from_seed::<sr25519::Public>("Alice"),	//root_key
-		None,													//Some(endowed_accounts)
+		Some(vec![get_account_id_from_seed::<sr25519::Public>("Alice"), get_account_id_from_seed::<sr25519::Public>("Bob")]),	// 原本是None												//Some(endowed_accounts)
 		true,													//enable_println
 	)
 }

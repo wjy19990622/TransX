@@ -523,7 +523,7 @@ impl<T: Trait> Module<T> {
 						is_too_large = true;
 					}
 				}
-			}这里有问题的 应该把
+			}
 
 		is_too_large
 		}
