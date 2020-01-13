@@ -576,6 +576,7 @@ impl<T: Trait> Module<T> {
 	fn reward_all_peaple(who: T::AccountId, thistime_reward: BalanceOf<T>) -> Result{
 		// 矿工与上上级的总奖励
 		let mut miner_reward = thistime_reward*<BalanceOf<T>>::from(8)/<BalanceOf<T>>::from(10);
+		let miner_reward_cp = miner_reward.clone();
 
 		// 每一个创始团队成员的奖励
 		let per_founder_reward = thistime_reward/<BalanceOf<T>>::from(10);
@@ -586,13 +587,13 @@ impl<T: Trait> Module<T> {
 
 		// 奖励上级
 		if let Some(father_address) = <AllMiners<T>>::get(who.clone()).father_address{
-			let fa_reward = miner_reward * <BalanceOf<T>>::from(50u32)/<BalanceOf<T>>::from(100u32);
+			let fa_reward = miner_reward_cp * <BalanceOf<T>>::from(50u32)/<BalanceOf<T>>::from(100u32);
 			T::Currency3::deposit_creating(&father_address, fa_reward);
 			miner_reward -= fa_reward;
 		};
 		// 奖励上上级
 		if let Some(grandpa_address) = <AllMiners<T>>::get(who.clone()).grandpa_address{
-			let gr_reward = miner_reward * <BalanceOf<T>>::from(25u32)/<BalanceOf<T>>::from(100u32);
+			let gr_reward = miner_reward_cp * <BalanceOf<T>>::from(25u32)/<BalanceOf<T>>::from(100u32);
 			T::Currency3::deposit_creating(&grandpa_address, gr_reward);
 			miner_reward -= gr_reward;
 		};
